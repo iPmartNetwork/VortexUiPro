@@ -63,7 +63,7 @@ export function BackupManagerPage() {
         apiGet('/api/v1/backups/encryption/keys').catch(() => ({ data: [] })),
         apiGet('/api/v1/backups/remote-storage').catch(() => ({ data: [] })),
       ])
-      setBackups(bkp.data?.backups || bkp.backups || [])
+      setBackups(bkp.data?.backups || [])
       setEncKeys(keys.data?.data || [])
       setStorageCfgs(storage.data?.data || [])
     } catch {} finally { setLoading(false) }

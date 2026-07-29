@@ -225,7 +225,7 @@ function MiniBarChart({ data, color, height = 40 }: { data: number[]; color: str
 
 // ─── Network Chart ──────────────────────────────────────────────────
 
-function NetworkChart({ sent, recv }: { sent: number[]; recv: number[] }) {
+function NetworkChart({ sent, recv, t }: { sent: number[]; recv: number[]; t: (key: string) => string }) {
   const max = Math.max(...sent, ...recv, 1)
 
   return (
@@ -504,7 +504,7 @@ export function MetricsDashboardPage() {
 
           {/* ─── Network & Traffic ──────────────────────────────── */}
           <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-            <NetworkChart sent={netSentData} recv={netRecvData} />
+            <NetworkChart sent={netSentData} recv={netRecvData} t={t} />
 
             <div className="glass-card p-5">
               <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 flex items-center gap-2">

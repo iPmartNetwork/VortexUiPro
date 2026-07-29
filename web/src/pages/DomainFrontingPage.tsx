@@ -26,6 +26,7 @@ interface CDNDomain {
   reachable: boolean
   latency_ms: number
   frontable: boolean
+  tls_version: string
   last_checked: number
   created_at: number
 }

@@ -81,7 +81,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  # ← needed for changelog
 
@@ -109,7 +109,7 @@ jobs:
 
       # ── Setup Node (for web build validation) ────────────────────
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -124,7 +124,7 @@ jobs:
 
       # ── Login to GHCR ────────────────────────────────────────────
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -132,14 +132,14 @@ jobs:
 
       # ── Setup Docker Buildx (for multi-arch) ─────────────────────
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           driver-opts: |
             image=moby/buildkit:latest
 
       # ── Setup QEMU (for ARM emulation) ───────────────────────────
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       # ── Install syft (for SBOM) ────────────────────────────────
       - name: Install syft
@@ -165,7 +165,7 @@ jobs:
 
       # ── Upload artifacts to workflow (for debugging) ─────────────
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: release-artifacts
@@ -212,7 +212,7 @@ jobs:
           - linux/arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get version
         id: ver
@@ -227,13 +227,13 @@ jobs:
           echo "📦 Version: ${VER}"
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -251,7 +251,7 @@ jobs:
           echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image (${{ matrix.platform }})
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/web.Dockerfile
@@ -278,7 +278,7 @@ jobs:
 
       - name: Upload Trivy results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trivy-web-${{ steps.platform_tag.outputs.suffix }}
           path: trivy-web-$*.sarif
@@ -294,7 +294,7 @@ jobs:
     needs: [goreleaser, web-docker]
     steps:
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}

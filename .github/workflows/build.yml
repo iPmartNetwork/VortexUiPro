@@ -34,16 +34,16 @@ jobs:
             target: node
             tags: vortexuipro-node
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Read version
         id: ver
         run: echo "version=$(cat VERSION 2>/dev/null || echo '0.0.1')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build ${{ matrix.name }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
@@ -66,7 +66,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Upload Trivy results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: trivy-${{ matrix.name }}

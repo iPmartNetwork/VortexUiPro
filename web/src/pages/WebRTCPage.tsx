@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { api } from '../api/client'
+import { apiClient } from '../api/client'
 import { useI18n } from '../hooks/useI18n'
 // CSS animations used instead of framer-motion
 
@@ -177,12 +177,12 @@ export default function WebRTCPage() {
     try {
       setLoading(true)
       const [iceRes, turnRes, peersRes, statsRes, meshRes, natRes] = await Promise.all([
-        api.get('/api/v1/webrtc/ice-config'),
-        api.get('/api/v1/webrtc/turn-servers'),
-        api.get('/api/v1/webrtc/peers'),
-        api.get('/api/v1/webrtc/peers/stats'),
-        api.get('/api/v1/webrtc/mesh-config'),
-        api.get('/api/v1/webrtc/nat-type').catch(() => null),
+        apiClient.get('/api/v1/webrtc/ice-config'),
+        apiClient.get('/api/v1/webrtc/turn-servers'),
+        apiClient.get('/api/v1/webrtc/peers'),
+        apiClient.get('/api/v1/webrtc/peers/stats'),
+        apiClient.get('/api/v1/webrtc/mesh-config'),
+        apiClient.get('/api/v1/webrtc/nat-type').catch(() => null),
       ])
       setIceConfig(iceRes.data)
       setTurnServers(turnRes.data || [])
@@ -203,7 +203,7 @@ export default function WebRTCPage() {
 
   const addTURNServer = async () => {
     try {
-      await api.post('/api/v1/webrtc/turn-servers', turnForm)
+      await apiClient.post('/api/v1/webrtc/turn-servers', turnForm)
       setShowAddTURN(false)
       setTurnForm({ address: '', username: '', password: '', realm: '', protocol: 'udp', region: '', bandwidth: 100 })
       loadData()
@@ -212,14 +212,14 @@ export default function WebRTCPage() {
 
   const deleteTURN = async (id: number) => {
     try {
-      await api.delete(`/api/v1/webrtc/turn-servers/${id}`)
+      await apiClient.delete(`/api/v1/webrtc/turn-servers/${id}`)
       loadData()
     } catch (err: any) { setError(err.message) }
   }
 
   const testTURN = async (address: string) => {
     try {
-      const res = await api.post('/api/v1/webrtc/turn-servers/test', { address })
+      const res = await apiClient.post('/api/v1/webrtc/turn-servers/test', { address })
       setTestResult({ address, ...res.data })
       setTimeout(() => setTestResult(null), 5000)
     } catch (err: any) { setError(err.message) }
@@ -227,14 +227,14 @@ export default function WebRTCPage() {
 
   const disconnectPeer = async (id: string) => {
     try {
-      await api.delete(`/api/v1/webrtc/peers/${id}`)
+      await apiClient.delete(`/api/v1/webrtc/peers/${id}`)
       loadData()
     } catch (err: any) { setError(err.message) }
   }
 
   const updateMeshConfig = async (cfg: Partial<P2PMeshConfig>) => {
     try {
-      await api.put('/api/v1/webrtc/mesh-config', { ...meshConfig, ...cfg })
+      await apiClient.put('/api/v1/webrtc/mesh-config', { ...meshConfig, ...cfg })
       loadData()
     } catch (err: any) { setError(err.message) }
   }
