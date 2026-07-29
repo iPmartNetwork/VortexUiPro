@@ -73,6 +73,7 @@
     <a href="#-quick-start">Quick Start</a> •
     <a href="#-architecture">Architecture</a> •
     <a href="#-deployment">Deployment</a> •
+    <a href="https://ipmartnetwork.github.io/VortexUiPro">📖 Docs</a> •
     <a href="https://github.com/iPmartNetwork/VortexUiPro/wiki">📖 Wiki</a> •
     <a href="#-api-reference">API</a> •
     <a href="#-faq">FAQ</a>
@@ -102,6 +103,7 @@
 - [📸 Screenshots](#-screenshots)
 - [🛠️ Deployment](#️-deployment)
 - [🔧 Management](#-management)
+- [📖 Docs (GitHub Pages)](https://ipmartnetwork.github.io/VortexUiPro) — Beautiful MkDocs site
 - [📖 Wiki](https://github.com/iPmartNetwork/VortexUiPro/wiki)
 - [📖 API Reference](#-api-reference)
 - [⚙️ Configuration](#️-configuration)

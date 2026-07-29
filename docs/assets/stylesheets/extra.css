@@ -1,0 +1,161 @@
+/* ═══════════════════════════════════════════════════════════════════
+ * VortexUiPro — Custom Styles for MkDocs Material
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Gradient Hero ──────────────────────────────────────────────── */
+.md-typeset h1:first-of-type {
+    background: linear-gradient(135deg, #7c3aed, #0d9488);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 900;
+    font-size: 2.5em;
+    margin-bottom: 0.2em;
+}
+
+/* ─── Card Grid ──────────────────────────────────────────────────── */
+.grid.cards {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.2rem;
+}
+
+.grid.cards > .md-typeset__card {
+    border: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 12px;
+    padding: 1.2rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--md-default-bg-color);
+}
+
+.grid.cards > .md-typeset__card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 32px rgba(124, 58, 237, 0.15);
+    border-color: var(--md-primary-fg-color);
+}
+
+.grid.cards > .md-typeset__card .lg {
+    color: var(--md-primary-fg-color);
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+.md-button {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 0.5em 1.5em;
+    transition: all 0.2s ease;
+    margin: 0.25em;
+}
+
+.md-button--primary {
+    background: linear-gradient(135deg, #7c3aed, #0d9488);
+    border: none;
+    color: white !important;
+}
+
+.md-button--primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────── */
+.md-typeset table:not(.md-typeset__table) {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.md-typeset table th {
+    background: var(--md-primary-fg-color);
+    color: white;
+    font-weight: 600;
+}
+
+/* ─── Code blocks ────────────────────────────────────────────────── */
+.md-typeset pre > code {
+    border-radius: 8px;
+    font-size: 0.85em;
+}
+
+.md-typeset code {
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+}
+
+/* ─── Admonitions ────────────────────────────────────────────────── */
+.md-typeset .admonition {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Mermaid diagrams ───────────────────────────────────────────── */
+.mermaid {
+    text-align: center;
+    margin: 1.5em 0;
+}
+
+/* ─── Navigation ─────────────────────────────────────────────────── */
+.md-header--shadow {
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
+}
+
+.md-tabs {
+    background: var(--md-primary-fg-color--dark);
+}
+
+/* ─── Tables of Contents ─────────────────────────────────────────── */
+.md-nav--secondary .md-nav__link {
+    font-size: 0.85em;
+}
+
+/* ─── API Reference specific ─────────────────────────────────────── */
+.endpoint-get { border-left: 4px solid #10b981; }
+.endpoint-post { border-left: 4px solid #3b82f6; }
+.endpoint-put { border-left: 4px solid #f59e0b; }
+.endpoint-delete { border-left: 4px solid #ef4444; }
+
+/* ─── Tags ────────────────────────────────────────────────────────── */
+.md-tags {
+    margin-bottom: 0.5em;
+}
+
+.md-tag {
+    border-radius: 4px;
+    font-size: 0.7em;
+    padding: 0.1em 0.5em;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────── */
+.md-footer-meta {
+    background: var(--md-primary-fg-color--dark);
+}
+
+/* ─── Dark mode adjustments ─────────────────────────────────────── */
+[data-md-color-scheme="slate"] .grid.cards > .md-typeset__card {
+    background: var(--md-default-bg-color);
+    border-color: var(--md-default-fg-color--lightest);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not(.md-typeset__table) {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Animated loading ───────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.md-content {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ─── Print styles ───────────────────────────────────────────────── */
+@media print {
+    .md-header, .md-tabs, .md-footer, .md-sidebar {
+        display: none;
+    }
+    .md-content {
+        margin: 0;
+        padding: 0;
+    }
+}
