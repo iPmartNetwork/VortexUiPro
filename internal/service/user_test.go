@@ -8,12 +8,6 @@ import (
 )
 
 func TestUserService_CRUD(t *testing.T) {
-	if err := database.InitDB(database.Config{
-		Type: "sqlite", DSN: ":memory:", LogLevel: "silent",
-	}); err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-
 	bus := events.Nop{}
 	svc := NewUserService(bus)
 
