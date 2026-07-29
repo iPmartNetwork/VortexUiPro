@@ -124,7 +124,7 @@ jobs:
 
       # ── Login to GHCR ────────────────────────────────────────────
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -132,14 +132,14 @@ jobs:
 
       # ── Setup Docker Buildx (for multi-arch) ─────────────────────
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
         with:
           driver-opts: |
             image=moby/buildkit:latest
 
       # ── Setup QEMU (for ARM emulation) ───────────────────────────
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v3
 
       # ── Install syft (for SBOM) ────────────────────────────────
       - name: Install syft
@@ -227,13 +227,13 @@ jobs:
           echo "📦 Version: ${VER}"
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -251,7 +251,7 @@ jobs:
           echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image (${{ matrix.platform }})
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/web.Dockerfile
@@ -294,7 +294,7 @@ jobs:
     needs: [goreleaser, web-docker]
     steps:
       - name: Login to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
