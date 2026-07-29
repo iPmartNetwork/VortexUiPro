@@ -73,6 +73,7 @@
     <a href="#-quick-start">Quick Start</a> •
     <a href="#-architecture">Architecture</a> •
     <a href="#-deployment">Deployment</a> •
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/wiki">📖 Wiki</a> •
     <a href="#-api-reference">API</a> •
     <a href="#-faq">FAQ</a>
   </p>
@@ -101,6 +102,7 @@
 - [📸 Screenshots](#-screenshots)
 - [🛠️ Deployment](#️-deployment)
 - [🔧 Management](#-management)
+- [📖 Wiki](https://github.com/iPmartNetwork/VortexUiPro/wiki)
 - [📖 API Reference](#-api-reference)
 - [⚙️ Configuration](#️-configuration)
 - [🗺️ Roadmap](#️-roadmap)
@@ -620,9 +622,17 @@ GET  /api/v1/cluster/nodes            # List cluster nodes
 GET  /api/v1/cluster/topology         # Topology map
 ```
 
-> 📘 **Full API documentation**: See [Wiki API Reference](https://github.com/iPmartNetwork/VortexUiPro/wiki/API)
+> 📘 **Full API documentation**: See [📖 Wiki → API Reference](https://github.com/iPmartNetwork/VortexUiPro/wiki/API-Reference) (200+ endpoints with request/response examples)
 > 
 > 📘 **Production Docker Compose**: See [`deploy/production.yml`](deploy/production.yml) for single-node production setup
+> 
+> 📖 **Quick Start**: See [📖 Wiki → Quick Start](https://github.com/iPmartNetwork/VortexUiPro/wiki/Quick-Start)
+> 
+> 📖 **Deployment Guide**: See [📖 Wiki → Deployment Guide](https://github.com/iPmartNetwork/VortexUiPro/wiki/Deployment-Guide)
+> 
+> ⚙️ **Configuration Reference**: See [📖 Wiki → Configuration](https://github.com/iPmartNetwork/VortexUiPro/wiki/Configuration) (40+ env vars documented)
+> 
+> 🌐 **Cluster Setup**: See [📖 Wiki → Cluster Setup](https://github.com/iPmartNetwork/VortexUiPro/wiki/Cluster-Setup)
 
 ---
 
