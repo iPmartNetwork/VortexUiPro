@@ -103,7 +103,6 @@ certs/
 data/
 
 # ─── Docker ────────────────────────────────────────────────────────
-.dockerignore
 docker-compose.override.yml
 
 # ─── Helm (generated) ──────────────────────────────────────────────
