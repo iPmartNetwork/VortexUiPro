@@ -15,7 +15,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.25"
 
 jobs:
   publish:

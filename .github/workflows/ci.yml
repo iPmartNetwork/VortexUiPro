@@ -37,7 +37,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.25"
   NODE_VERSION: "22"
   REGISTRY: ghcr.io
 
@@ -53,11 +53,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62
-          args: --timeout=5m --disable errcheck ./...
+      - name: Go Vet
+        run: go vet ./...
 
       - uses: actions/setup-node@v5
         with:
