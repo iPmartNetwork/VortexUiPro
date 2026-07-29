@@ -37,7 +37,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.23"
   NODE_VERSION: "22"
   REGISTRY: ghcr.io
 
@@ -54,7 +54,9 @@ jobs:
           cache: true
 
       - name: Go Vet
-        run: go vet ./...
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gcc
+          go vet ./...
 
       - uses: actions/setup-node@v5
         with:
@@ -154,7 +156,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [panel, web]
+        include:
+          - target: panel
+            file: deploy/Dockerfile
+            build_target: panel
+          - target: node
+            file: deploy/Dockerfile
+            build_target: node
+          - target: web
+            file: deploy/web.Dockerfile
+            build_target: ''
     steps:
       - uses: actions/checkout@v5
 
@@ -164,8 +175,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/Dockerfile
-          target: ${{ matrix.target }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.build_target }}
           push: false
           tags: vortexuipro-${{ matrix.target }}:ci
           cache-from: type=gha,scope=${{ matrix.target }}
