@@ -1,0 +1,127 @@
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro — Dockerfile for GoReleaser 🐳
+#
+# This Dockerfile is designed to be used with GoReleaser's docker builder.
+# GoReleaser copies the pre-built binary into the build context, so this
+# only needs to create the runtime image — not build Go from source.
+#
+# Two targets:
+#   panel  — Main panel runtime (includes web dist from separate job)
+#   node   — Lightweight node agent (no web assets)
+#
+# Usage:
+#   docker build -f deploy/Dockerfile.goreleaser --target panel .
+#   docker build -f deploy/Dockerfile.goreleaser --target node .
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Base: shared runtime dependencies ──────────────────────────────
+FROM alpine:3.20 AS base
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    bash \
+    curl \
+    sqlite \
+    && rm -rf /var/cache/apk/*
+
+# Create vortex user (non-root)
+RUN addgroup -S vortex && \
+    adduser -S vortex -G vortex && \
+    mkdir -p /etc/vortex/data \
+             /etc/vortex/certs \
+             /etc/vortex/mtproto \
+             /etc/vortex/backups \
+             /var/log/vortex && \
+    chown -R vortex:vortex /etc/vortex /var/log/vortex
+
+# ── Panel target ───────────────────────────────────────────────────
+FROM base AS panel
+WORKDIR /etc/vortex
+
+# Copy GoReleaser-built binary
+COPY vortexuipro /usr/local/bin/vortexuipro
+
+# Copy web dist (built separately in CI, mounted at build time)
+COPY web/dist /usr/share/vortex/web/
+
+# Copy migrations
+COPY migrations /etc/vortex/migrations/
+
+# Copy deploy scripts
+COPY deploy/scripts /usr/local/lib/vortex/scripts/
+
+# Copy install script
+COPY install.sh /usr/local/bin/vortex-install.sh
+RUN chmod +x /usr/local/bin/vortex-install.sh
+
+# Environment defaults
+ENV VORTEX_HTTP_ADDR=:8080
+ENV VORTEX_GRPC_ADDR=:50051
+ENV VORTEX_DB_TYPE=sqlite
+ENV VORTEX_DATABASE_URL=/etc/vortex/data/vortex.db
+ENV VORTEX_LOG_LEVEL=info
+ENV VORTEX_CORE=xray
+ENV VORTEX_LOCAL_NODE=true
+ENV VORTEX_AUTO_RECOVER=true
+ENV VORTEX_WEB_ROOT=/usr/share/vortex/web
+
+EXPOSE 8080 50051 2087
+
+VOLUME ["/etc/vortex/data", "/etc/vortex/certs", "/etc/vortex/mtproto"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:8080/api/v1/health || exit 1
+
+USER vortex
+
+LABEL org.opencontainers.image.title="VortexUiPro Panel"
+LABEL org.opencontainers.image.description="Next-generation proxy management panel"
+LABEL org.opencontainers.image.source="https://github.com/iPmartNetwork/VortexUiPro"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+
+ENTRYPOINT ["vortexuipro"]
+
+# ── Node Agent target ──────────────────────────────────────────────
+FROM base AS node
+WORKDIR /etc/vortex
+
+# Copy GoReleaser-built binary
+COPY vortexuipro-agent /usr/local/bin/vortexuipro-agent
+
+# Copy deploy scripts (for auto-recovery)
+COPY deploy/scripts /usr/local/lib/vortex/scripts/
+
+# Node-specific defaults
+ENV NODE_GRPC_ADDR=:50051
+ENV VORTEX_LOG_LEVEL=info
+
+EXPOSE 50051
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:50051/health || exit 1
+
+USER vortex
+
+LABEL org.opencontainers.image.title="VortexUiPro Node Agent"
+LABEL org.opencontainers.image.description="Distributed node agent for VortexUiPro cluster"
+LABEL org.opencontainers.image.source="https://github.com/iPmartNetwork/VortexUiPro"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+
+ENTRYPOINT ["vortexuipro-agent"]
+
+# ── Dev target ─────────────────────────────────────────────────────
+FROM panel AS dev
+USER root
+RUN apk add --no-cache \
+    go \
+    gcc \
+    musl-dev \
+    git \
+    openssh \
+    vim \
+    htop \
+    && rm -rf /var/cache/apk/*
+USER vortex
+ENV VORTEX_LOG_LEVEL=debug
+ENV GIN_MODE=debug
