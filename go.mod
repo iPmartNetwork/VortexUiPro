@@ -12,10 +12,10 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.6
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/xlzd/gotp v0.1.0
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.35.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10
 	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
@@ -60,9 +60,9 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
