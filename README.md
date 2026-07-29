@@ -18,7 +18,7 @@
       <img src="https://img.shields.io/github/v/release/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=github&color=blueviolet" alt="Release"/>
     </a>
     <a href="https://go.dev/">
-      <img src="https://img.shields.io/badge/Go-1.23+-00ADD8?style=for-the-badge&logo=go" alt="Go"/>
+      <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?style=for-the-badge&logo=go" alt="Go"/>
     </a>
     <a href="https://react.dev/">
       <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" alt="React"/>
@@ -305,7 +305,7 @@ After startup:
 ### 📦 Manual Build
 
 ```bash
-# Prerequisites: Go 1.23+, Node.js 20+
+# Prerequisites: Go 1.25+, Node.js 20+
 git clone https://github.com/iPmartNetwork/VortexUiPro.git
 cd VortexUiPro
 
