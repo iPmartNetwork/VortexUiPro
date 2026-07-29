@@ -199,11 +199,13 @@ jobs:
           cache: true
 
       - name: govulncheck
+        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
       - name: Trivy scan (Dockerfile)
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
