@@ -31,6 +31,43 @@
     </a>
   </p>
 
+  <!-- CI/CD Status Badges -->
+  <p>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/actions/workflows/ci.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/iPmartNetwork/VortexUiPro/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/actions/workflows/auto-release.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/iPmartNetwork/VortexUiPro/auto-release.yml?style=for-the-badge&logo=goreleaser&logoColor=white&label=Release" alt="Release"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/actions/workflows/build.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/iPmartNetwork/VortexUiPro/build.yml?style=for-the-badge&logo=docker&logoColor=white&label=Docker" alt="Docker Build"/>
+    </a>
+    <a href="https://goreportcard.com/report/github.com/iPmartNetwork/VortexUiPro">
+      <img src="https://goreportcard.com/badge/github.com/iPmartNetwork/VortexUiPro?style=for-the-badge" alt="Go Report Card"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/actions/workflows/deploy.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/iPmartNetwork/VortexUiPro/deploy.yml?style=for-the-badge&logo=ssh&logoColor=white&label=Deploy" alt="Deploy"/>
+    </a>
+  </p>
+
+  <p>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/commits/master">
+      <img src="https://img.shields.io/github/last-commit/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=git&logoColor=white" alt="Last Commit"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro">
+      <img src="https://img.shields.io/github/languages/code-size/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=github&color=orange" alt="Code Size"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/blob/master/go.mod">
+      <img src="https://img.shields.io/github/go-mod/go-version/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=go" alt="Go Version"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/issues">
+      <img src="https://img.shields.io/github/issues/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=github&color=red" alt="Issues"/>
+    </a>
+    <a href="https://github.com/iPmartNetwork/VortexUiPro/blob/master/LICENSE">
+      <img src="https://img.shields.io/github/license/iPmartNetwork/VortexUiPro?style=for-the-badge&logo=opensourceinitiative&logoColor=white&color=green" alt="License"/>
+    </a>
+  </p>
+
   <p>
     <a href="#-features">Features</a> •
     <a href="#-quick-start">Quick Start</a> •
@@ -730,7 +767,7 @@ the Free Software Foundation, either version 3 of the License, or
 ### Projects That Inspired Us
 
 - **[VortexUI](https://github.com/example/vortexui)** — Original proxy management panel foundation
-- **[Heimdall](https://github.com/example/heimdall)** — Advanced subscription + cluster features
+
 
 ---
 
