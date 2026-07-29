@@ -87,6 +87,16 @@ if [[ ! -d "${DOCS_DIR}" ]]; then
     exit 1
 fi
 
+# Check if wiki repo is accessible (GitHub Wiki must be enabled)
+WIKI_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/wiki"
+if ! curl -sf "${WIKI_URL}" > /dev/null 2>&1; then
+    log_error "Wiki not found at ${WIKI_URL}"
+    log_error "Please enable GitHub Wiki first:"
+    log_error "  Settings → Features → Wikis → Enable"
+    log_error "  https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/settings"
+    exit 1
+fi
+
 # Show what will be synced
 log_info "Source: ${DOCS_DIR}"
 log_info "Target: ${WIKI_REPO}"
