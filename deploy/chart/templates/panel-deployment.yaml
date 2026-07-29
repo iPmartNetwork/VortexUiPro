@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-panel
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: panel
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vortexuipro.panelSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vortexuipro.panelSelectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vortexuipro.serviceAccountName" . }}
+      containers:
+        - name: panel
+          image: "{{ .Values.image.repository }}-panel:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.panel.port }}
+              name: http
+            - containerPort: {{ .Values.panel.grpcPort }}
+              name: grpc
+            - containerPort: {{ .Values.panel.clusterPort }}
+              name: cluster
+          env:
+            - name: VORTEX_DB_TYPE
+              value: {{ .Values.panel.env.VORTEX_DB_TYPE }}
+            - name: VORTEX_HTTP_ADDR
+              value: ":{{ .Values.panel.port }}"
+            - name: VORTEX_GRPC_ADDR
+              value: ":{{ .Values.panel.grpcPort }}"
+            - name: VORTEX_LOG_LEVEL
+              value: {{ .Values.panel.env.VORTEX_LOG_LEVEL }}
+            - name: VORTEX_CORE
+              value: {{ .Values.panel.env.VORTEX_CORE }}
+            - name: VORTEX_PROMETHEUS_ENABLED
+              value: {{ .Values.panel.env.VORTEX_PROMETHEUS_ENABLED }}
+            - name: VORTEX_DATABASE_URL
+              value: "postgres://vortex:$(DATABASE_PASSWORD)@{{ .Release.Name }}-postgresql:5432/vortex?sslmode=disable"
+            - name: VORTEX_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.panel.secrets.existingSecret | default (printf "%s-secrets" (include "vortexuipro.fullname" .)) }}
+                  key: jwt-secret
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.panel.secrets.existingSecret | default (printf "%s-secrets" (include "vortexuipro.fullname" .)) }}
+                  key: database-password
+          livenessProbe:
+            {{- toYaml .Values.panel.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.panel.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.panel.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /etc/vortex/data
+            - name: backups
+              mountPath: /etc/vortex/backups
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "vortexuipro.fullname" . }}-panel-data
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ include "vortexuipro.fullname" . }}-panel-backups

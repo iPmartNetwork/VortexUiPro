@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-config
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  # ─── Panel Config ──────────────────────────────────────────────────
+  VORTEX_DB_TYPE: {{ .Values.panel.env.VORTEX_DB_TYPE | quote }}
+  VORTEX_HTTP_ADDR: ":{{ .Values.panel.port }}"
+  VORTEX_GRPC_ADDR: ":{{ .Values.panel.grpcPort }}"
+  VORTEX_LOG_LEVEL: {{ .Values.panel.env.VORTEX_LOG_LEVEL | quote }}
+  VORTEX_CORE: {{ .Values.panel.env.VORTEX_CORE | quote }}
+  VORTEX_PROMETHEUS_ENABLED: {{ .Values.panel.env.VORTEX_PROMETHEUS_ENABLED | quote }}
+  VORTEX_CLUSTER_ENABLED: {{ .Values.panel.env.VORTEX_CLUSTER_ENABLED | quote }}
+  VORTEX_CLUSTER_NODE_NAME: {{ .Values.panel.env.VORTEX_CLUSTER_NODE_NAME | default .Release.Name | quote }}
+  VORTEX_CLUSTER_ADDR: ":{{ .Values.panel.clusterPort }}"
+  VORTEX_CLUSTER_PEERS: {{ .Values.panel.env.VORTEX_CLUSTER_PEERS | default "" | quote }}
+  VORTEX_CLUSTER_REGION: {{ .Values.panel.env.VORTEX_CLUSTER_REGION | default "default" | quote }}
+  VORTEX_ACTIVITY_ENABLED: {{ .Values.panel.env.VORTEX_ACTIVITY_ENABLED | default "true" | quote }}
+  VORTEX_ACTIVITY_FLUSH_SEC: {{ .Values.panel.env.VORTEX_ACTIVITY_FLUSH_SEC | default "60" | quote }}
+  VORTEX_AUTO_RECOVER: {{ .Values.panel.env.VORTEX_AUTO_RECOVER | default "true" | quote }}
+  VORTEX_LOCAL_NODE: {{ .Values.panel.env.VORTEX_LOCAL_NODE | default "true" | quote }}
+  VORTEX_BACKUP_DIR: /etc/vortex/backups
+  VORTEX_BACKUP_INTERVAL: {{ .Values.backup.interval | default "24h" | quote }}
+  VORTEX_BACKUP_RETENTION: {{ .Values.backup.retention | default "30d" | quote }}
+
+  # ─── Telegram & Notifications ──────────────────────────────────────
+  VORTEX_TELEGRAM_BOT_TOKEN: {{ .Values.panel.env.VORTEX_TELEGRAM_BOT_TOKEN | default "" | quote }}
+  VORTEX_TELEGRAM_ADMIN_ID: {{ .Values.panel.env.VORTEX_TELEGRAM_ADMIN_ID | default "" | quote }}
+
+  # ─── SMTP ──────────────────────────────────────────────────────────
+  VORTEX_SMTP_HOST: {{ .Values.panel.env.VORTEX_SMTP_HOST | default "" | quote }}
+  VORTEX_SMTP_PORT: {{ .Values.panel.env.VORTEX_SMTP_PORT | default "587" | quote }}
+  VORTEX_SMTP_FROM: {{ .Values.panel.env.VORTEX_SMTP_FROM | default "" | quote }}
+
+  # ─── Payment ───────────────────────────────────────────────────────
+  VORTEX_ZARINPAL_MERCHANT: {{ .Values.panel.env.VORTEX_ZARINPAL_MERCHANT | default "" | quote }}
+  VORTEX_NOWPAYMENTS_API_KEY: {{ .Values.panel.env.VORTEX_NOWPAYMENTS_API_KEY | default "" | quote }}

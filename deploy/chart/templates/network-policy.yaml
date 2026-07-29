@@ -1,0 +1,152 @@
+{{- if .Values.global.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-default-deny
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-allow-panel
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "vortexuipro.panelSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from web to panel
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "vortexuipro.webSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.panel.port }}
+          protocol: TCP
+        - port: {{ .Values.panel.grpcPort }}
+          protocol: TCP
+    # Allow from backup cronjob to panel (same namespace)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backup
+      ports:
+        - port: {{ .Values.panel.port }}
+          protocol: TCP
+    # Allow from Prometheus operator
+    {{- if .Values.prometheus.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: {{ .Values.panel.port }}
+          protocol: TCP
+    {{- end }}
+    # Allow internal cluster traffic
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "vortexuipro.panelSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.panel.clusterPort }}
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+          protocol: TCP
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-allow-web
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "vortexuipro.webSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: {{ .Values.web.port }}
+          protocol: TCP
+        - port: {{ .Values.web.securePort }}
+          protocol: TCP
+    {{- if .Values.web.ingress.enabled }}
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: {{ .Values.web.port }}
+          protocol: TCP
+    {{- end }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "vortexuipro.panelSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.panel.port }}
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+        - port: 53
+          protocol: UDP
+{{- end }}

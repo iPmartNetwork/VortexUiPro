@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro Helm Chart — CI Test Values
+#
+# These values are used for CI testing with `helm test` and `helm lint`.
+# They disable resource-heavy sub-charts and use minimal resources.
+# ═══════════════════════════════════════════════════════════════════════
+
+# ─── Minimal Replicas for CI ────────────────────────────────────────
+replicaCount: 1
+
+panel:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
+  autoscaling:
+    enabled: false
+
+  persistence:
+    data:
+      size: 100Mi
+    backups:
+      size: 100Mi
+
+  podDisruptionBudget:
+    enabled: false
+
+web:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 50m
+    limits:
+      memory: 64Mi
+      cpu: 100m
+
+  ingress:
+    enabled: false
+
+  podDisruptionBudget:
+    enabled: false
+
+# ─── Disable Heavy Dependencies in CI ───────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: vortex
+    database: vortex
+  primary:
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+    persistence:
+      enabled: false  # Disable PVC in CI
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+    persistence:
+      enabled: false  # Disable PVC in CI
+
+prometheus:
+  enabled: false    # Disable monitoring stack in CI
+
+grafana:
+  enabled: false    # Disable monitoring stack in CI
+
+# ─── Disable Optional Features in CI ────────────────────────────────
+backup:
+  enabled: false
+
+global:
+  networkPolicies:
+    enabled: false    # Network policies require CNI

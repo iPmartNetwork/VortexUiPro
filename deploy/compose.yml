@@ -1,0 +1,134 @@
+# ─── VortexUiPro Cluster Test Environment ─────────────────────────────
+# Spin up 3 panel nodes with SQLite, mTLS mesh, and WebSocket streaming.
+# Usage:
+#   docker compose -f deploy/compose.yml up -d
+#   docker compose -f deploy/compose.yml logs -f
+#
+# After startup:
+#   Node-1: http://localhost:8080
+#   Node-2: http://localhost:8081
+#   Node-3: http://localhost:8082
+#   Default login: admin / admin123
+#
+# Cluster peers are auto-configured via environment variables.
+# Each node stores its DB under deploy/data/node-*/.
+# ──────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── Node 1 (Leader candidate, highest priority) ────────────────────
+  node-1:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    hostname: node-1
+    container_name: vortex-node-1
+    ports:
+      - "8080:8080"     # HTTP API
+      - "1337:1337"     # Cluster mesh
+      - "10085:10085"   # Xray API
+    volumes:
+      - ./data/node-1/db:/etc/vortex
+      - ./data/node-1/pki:/etc/vortex/pki
+    environment:
+      VORTEX_HTTP_ADDR: ":8080"
+      VORTEX_DATABASE_URL: "/etc/vortex/vortex.db"
+      VORTEX_DB_TYPE: "sqlite"
+      VORTEX_JWT_SECRET: "vortex-cluster-test-secret-key-00000000001"
+      VORTEX_CORE_BIN: ""
+      VORTEX_ACTIVITY_ENABLED: "false"
+      VORTEX_LOG_LEVEL: "debug"
+
+      # Cluster config
+      VORTEX_CLUSTER_ENABLED: "true"
+      VORTEX_CLUSTER_NODE_NAME: "node-1"
+      VORTEX_CLUSTER_ADDR: ":1337"
+      VORTEX_CLUSTER_PEERS: "node-2:1337,node-3:1337"
+      VORTEX_CLUSTER_REGION: "us-east"
+      VORTEX_CLUSTER_PRIORITY: "200"
+      VORTEX_CLUSTER_TLS_CERT: ""
+      VORTEX_CLUSTER_TLS_KEY: ""
+      VORTEX_CLUSTER_TLS_CA: ""
+      VORTEX_CLUSTER_GRPC: "true"
+
+      # Tunnel monitor (disabled in cluster test)
+      VORTEX_TUNNEL_MONITOR: "false"
+
+  # ─── Node 2 (Follower, medium priority) ─────────────────────────────
+  node-2:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    hostname: node-2
+    container_name: vortex-node-2
+    ports:
+      - "8081:8080"     # HTTP API
+      - "1338:1337"     # Cluster mesh
+    volumes:
+      - ./data/node-2/db:/etc/vortex
+      - ./data/node-2/pki:/etc/vortex/pki
+    environment:
+      VORTEX_HTTP_ADDR: ":8080"
+      VORTEX_DATABASE_URL: "/etc/vortex/vortex.db"
+      VORTEX_DB_TYPE: "sqlite"
+      VORTEX_JWT_SECRET: "vortex-cluster-test-secret-key-00000000002"
+      VORTEX_CORE_BIN: ""
+      VORTEX_ACTIVITY_ENABLED: "false"
+      VORTEX_LOG_LEVEL: "debug"
+
+      # Cluster config
+      VORTEX_CLUSTER_ENABLED: "true"
+      VORTEX_CLUSTER_NODE_NAME: "node-2"
+      VORTEX_CLUSTER_ADDR: ":1337"
+      VORTEX_CLUSTER_PEERS: "node-1:1337,node-3:1337"
+      VORTEX_CLUSTER_REGION: "us-west"
+      VORTEX_CLUSTER_PRIORITY: "150"
+      VORTEX_CLUSTER_TLS_CERT: ""
+      VORTEX_CLUSTER_TLS_KEY: ""
+      VORTEX_CLUSTER_TLS_CA: ""
+      VORTEX_CLUSTER_GRPC: "true"
+
+  # ─── Node 3 (Follower, standard priority) ───────────────────────────
+  node-3:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    hostname: node-3
+    container_name: vortex-node-3
+    ports:
+      - "8082:8080"     # HTTP API
+      - "1339:1337"     # Cluster mesh
+    volumes:
+      - ./data/node-3/db:/etc/vortex
+      - ./data/node-3/pki:/etc/vortex/pki
+    environment:
+      VORTEX_HTTP_ADDR: ":8080"
+      VORTEX_DATABASE_URL: "/etc/vortex/vortex.db"
+      VORTEX_DB_TYPE: "sqlite"
+      VORTEX_JWT_SECRET: "vortex-cluster-test-secret-key-00000000003"
+      VORTEX_CORE_BIN: ""
+      VORTEX_ACTIVITY_ENABLED: "false"
+      VORTEX_LOG_LEVEL: "debug"
+
+      # Cluster config
+      VORTEX_CLUSTER_ENABLED: "true"
+      VORTEX_CLUSTER_NODE_NAME: "node-3"
+      VORTEX_CLUSTER_ADDR: ":1337"
+      VORTEX_CLUSTER_PEERS: "node-1:1337,node-2:1337"
+      VORTEX_CLUSTER_REGION: "eu-central"
+      VORTEX_CLUSTER_PRIORITY: "100"
+      VORTEX_CLUSTER_TLS_CERT: ""
+      VORTEX_CLUSTER_TLS_KEY: ""
+      VORTEX_CLUSTER_TLS_CA: ""
+      VORTEX_CLUSTER_GRPC: "true"
+
+# ─── Networks ─────────────────────────────────────────────────────────
+networks:
+  default:
+    driver: bridge
+    name: vortex-cluster
+
+# ─── Volumes (redundant with bind mounts but kept for reference) ─────
+volumes:
+  node-1-db:
+  node-2-db:
+  node-3-db:

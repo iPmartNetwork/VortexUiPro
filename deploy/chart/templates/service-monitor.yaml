@@ -1,0 +1,36 @@
+{{- if .Values.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-panel
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: panel
+    {{- with .Values.prometheus.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "vortexuipro.panelSelectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.prometheus.serviceMonitor.scrapeInterval | default "15s" }}
+      scrapeTimeout: {{ .Values.prometheus.serviceMonitor.scrapeTimeout | default "10s" }}
+      scheme: http
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+          action: replace
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+          action: replace
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}
