@@ -26,7 +26,7 @@ ENV VITE_APP_VERSION=$VERSION
 RUN npm run build
 
 # ── Stage 2: Backend (panel binary, needs web dist) ────────────────
-FROM golang:1.25-alpine AS backend-builder
+FROM golang:1.23-alpine AS backend-builder
 WORKDIR /app
 RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
@@ -37,7 +37,7 @@ ARG VERSION=0.0.1
 RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/local/bin/vortexuipro ./cmd/panel
 
 # ── Stage 3: Agent (lightweight node binary, NO frontend deps!) ────
-FROM golang:1.25-alpine AS agent-builder
+FROM golang:1.23-alpine AS agent-builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
