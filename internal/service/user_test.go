@@ -3,7 +3,6 @@ package service
 import (
 	"testing"
 
-	"vortexuipro/internal/database"
 	"vortexuipro/internal/events"
 )
 
