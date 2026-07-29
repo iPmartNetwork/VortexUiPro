@@ -1,12 +1,31 @@
-# -- Build Frontend --
-FROM node:20-alpine AS frontend-builder
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro — Dockerfile 🐳
+#
+# Multi-stage build:
+#   frontend-builder  — Builds the React SPA (for panel target)
+#   backend-builder   — Builds the panel binary (depends on frontend)
+#   agent-builder     — Builds the lightweight agent binary (no frontend!)
+#   panel             — Production runtime image for the panel
+#   node              — Lightweight runtime image for the node agent
+#
+# Usage:
+#   docker build --target panel -t vortexuipro-panel .
+#   docker build --target node -t vortexuipro-node .
+#   docker build --target web -f deploy/web.Dockerfile -t vortexuipro-web .
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Stage 1: Frontend (only needed for panel) ──────────────────────
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json* ./
-RUN npm ci
-COPY web/ .
+RUN npm ci --prefer-offline --no-audit
+COPY web/ ./
+ARG VERSION=0.0.1
+ENV VITE_APP_VERSION=$VERSION
 RUN npm run build
 
-# -- Build Backend --
+# ── Stage 2: Backend (panel binary, needs web dist) ────────────────
 FROM golang:1.23-alpine AS backend-builder
 WORKDIR /app
 RUN apk add --no-cache gcc musl-dev
@@ -14,19 +33,20 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend-builder /app/web/dist ./web/dist
-RUN CGO_ENABLED=1 go build -o /usr/local/bin/vortexuipro ./cmd/panel
+ARG VERSION=0.0.1
+RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/local/bin/vortexuipro ./cmd/panel
 
-# -- Node Agent --
-FROM alpine:3.20 AS node
-RUN apk add --no-cache ca-certificates tzdata
-COPY --from=backend-builder /usr/local/bin/vortexuipro /usr/local/bin/vortexuipro
-ENV NODE_GRPC_ADDR=:50051
-EXPOSE 50051
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD wget -qO- http://localhost:50051/health || exit 1
-CMD ["vortexuipro", "--node"]
+# ── Stage 3: Agent (lightweight node binary, NO frontend deps!) ────
+FROM golang:1.23-alpine AS agent-builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/ ./internal/
+COPY cmd/agent/ ./cmd/agent/
+ARG VERSION=0.0.1
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/local/bin/vortexuipro-agent ./cmd/agent
 
-# -- Runtime (Panel) --
+# ── Stage 4: Panel Runtime ──────────────────────────────────────────
 FROM alpine:3.20 AS panel
 RUN apk add --no-cache ca-certificates tzdata bash curl
 
@@ -38,7 +58,7 @@ COPY --from=backend-builder /usr/local/bin/vortexuipro /usr/local/bin/vortexuipr
 # Create data directories
 RUN mkdir -p /etc/vortex/data /etc/vortex/certs /etc/vortex/mtproto /etc/vortex/backups
 
-# Environment variables
+# Environment defaults
 ENV VORTEX_HTTP_ADDR=:8080
 ENV VORTEX_DB_TYPE=sqlite
 ENV VORTEX_DATABASE_URL=/etc/vortex/data/vortex.db
@@ -51,7 +71,37 @@ EXPOSE 8080 50051 2087
 
 VOLUME ["/etc/vortex/data", "/etc/vortex/certs", "/etc/vortex/mtproto"]
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:8080/api/v1/health || exit 1
 
 ENTRYPOINT ["vortexuipro"]
+
+LABEL org.opencontainers.image.title="VortexUiPro Panel"
+LABEL org.opencontainers.image.description="Next-generation proxy management panel"
+LABEL org.opencontainers.image.version="${VERSION}"
+
+# ── Stage 5: Node Agent Runtime (lightweight, no panel dependencies) ──
+FROM alpine:3.20 AS node
+RUN apk add --no-cache ca-certificates tzdata curl
+
+WORKDIR /etc/vortex
+
+# Copy agent binary (built independently from frontend!)
+COPY --from=agent-builder /usr/local/bin/vortexuipro-agent /usr/local/bin/vortexuipro-agent
+
+# Create minimal data directory
+RUN mkdir -p /etc/vortex/data
+
+# Node-specific defaults
+ENV NODE_GRPC_ADDR=:50051
+
+EXPOSE 50051
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:50051/health || exit 1
+
+ENTRYPOINT ["vortexuipro-agent"]
+
+LABEL org.opencontainers.image.title="VortexUiPro Node Agent"
+LABEL org.opencontainers.image.description="Lightweight node agent for distributed proxy management"
+LABEL org.opencontainers.image.version="${VERSION}"
