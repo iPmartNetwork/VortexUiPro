@@ -49,6 +49,7 @@ jobs:
           file: ${{ matrix.file }}
           target: ${{ matrix.build_target }}
           push: false
+          load: true
           tags: ${{ matrix.tags }}:${{ steps.ver.outputs.version }}
           build-args: |
             VERSION=${{ steps.ver.outputs.version }}
