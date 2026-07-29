@@ -116,7 +116,10 @@ jobs:
         run: go vet ./...
 
       - name: Run tests with race detector
-        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: "1"
+        run: go test -race -count=1 -p 1 -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
         uses: actions/upload-artifact@v5
@@ -200,6 +203,8 @@ jobs:
 
       - name: govulncheck
         continue-on-error: true
+        env:
+          GOTOOLCHAIN: local
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
@@ -216,7 +221,7 @@ jobs:
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
 
