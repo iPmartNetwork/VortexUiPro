@@ -57,24 +57,16 @@ data/
 *.cert
 certs/
 
-# ─── Documentation (already in docs/ but not needed at runtime) ─────
+# ─── Documentation / Config (not needed at runtime) ─────────────────
 docs/
 *.md
-CHANGELOG.md
-README.md
-README.fa.md
 mkdocs.yml
-
-# ─── CI / GitHub ────────────────────────────────────────────────────
 .github/
 *.yml
 *.yaml
 
 # ─── Misc ───────────────────────────────────────────────────────────
-Dockerfile
-deploy/Dockerfile
-deploy/web.Dockerfile
-deploy/Dockerfile.goreleaser
 docker-compose.yml
+docker-compose.override.yml
 *.tar.gz
 *.zip
