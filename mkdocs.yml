@@ -26,7 +26,6 @@ copyright: "Copyright &copy; 2025 iPmart Network — GNU General Public License 
 # ═══════════════════════════════════════════════════════════════════════
 theme:
   name: material
-  custom_dir: docs/overrides
 
   # Brand colors
   palette:
@@ -52,10 +51,9 @@ theme:
   font:
     text: Inter
     code: JetBrains Mono
-  logo: assets/logo.svg
-  favicon: assets/favicon.ico
   icon:
     repo: fontawesome/brands/github
+    logo: material/book-open-page-variant
     admonition:
       note: octicons/tag-16
       abstract: octicons/checklist-16
@@ -114,9 +112,6 @@ plugins:
   - git-revision-date-localized:
       enable_creation_date: true
       type: date
-  - git-committers:
-      repository: iPmartNetwork/VortexUiPro
-      branch: master
   - tags:
       tags_file: tags.md
   - social:
@@ -210,8 +205,8 @@ nav:
       - Cluster: configuration.md#cluster-configuration
       - Subscription: configuration.md#subscription-configuration
   - Cluster Setup: cluster-setup.md
-  - Changelog: changelog.md
-  - License: license.md
+  - Changelog: https://github.com/iPmartNetwork/VortexUiPro/blob/master/CHANGELOG.md
+  - License: https://github.com/iPmartNetwork/VortexUiPro/blob/master/LICENSE
   - GitHub ⚡: https://github.com/iPmartNetwork/VortexUiPro
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -244,11 +239,6 @@ extra:
           name: This page could be improved
           data: 0
           note: Thanks for your feedback!
-
-  # Version selector (when we have multiple versions)
-  version:
-    provider: mike
-    default: latest
 
 # ═══════════════════════════════════════════════════════════════════════
 # 📡 Additional configuration

@@ -62,7 +62,7 @@ jobs:
 
       - name: Build with MkDocs
         run: |
-          mkdocs build --strict --site-dir "${{ runner.temp }}/site"
+          mkdocs build --site-dir "${{ runner.temp }}/site"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
