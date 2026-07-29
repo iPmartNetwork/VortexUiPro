@@ -1,0 +1,37 @@
+{{- if .Values.panel.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-panel
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: panel
+spec:
+  selector:
+    matchLabels:
+      {{- include "vortexuipro.panelSelectorLabels" . | nindent 6 }}
+  {{- if .Values.panel.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.panel.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.panel.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.web.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-web
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  selector:
+    matchLabels:
+      {{- include "vortexuipro.webSelectorLabels" . | nindent 6 }}
+  {{- if .Values.web.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.web.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.web.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+{{- end }}

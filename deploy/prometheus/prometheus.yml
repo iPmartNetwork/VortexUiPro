@@ -1,0 +1,110 @@
+# ─── Prometheus Configuration for VortexUiPro ─────────────────────────
+# Scrapes VortexUiPro panel metrics, node agents, core engines,
+# and cluster nodes. Designed for both Docker and native deployments.
+# ──────────────────────────────────────────────────────────────────────
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+
+  external_labels:
+    monitor: 'vortexuipro'
+    environment: 'production'
+
+# ─── Alerting Rules ─────────────────────────────────────────────────
+rule_files:
+  - 'alerts.yml'
+  - 'rules/*.yml'
+
+# ─── Scrape Configurations ──────────────────────────────────────────
+scrape_configs:
+
+  # ── 1. VortexUiPro Panel (Self-Metrics) ──────────────────────────
+  - job_name: 'vortexuipro-panel'
+    metrics_path: '/metrics'
+    honor_labels: true
+    static_configs:
+      - targets:
+          - 'panel:8080'        # Docker compose
+          - 'localhost:8080'    # Native/systemd
+        labels:
+          service: 'panel'
+          component: 'api'
+    relabel_configs:
+      - source_labels: ['__address__']
+        regex: 'panel:.*'
+        replacement: 'docker'
+        target_label: 'deployment'
+      - source_labels: ['__address__']
+        regex: 'localhost:.*'
+        replacement: 'native'
+        target_label: 'deployment'
+
+  # ── 2. Cluster Nodes ─────────────────────────────────────────────
+  - job_name: 'vortexuipro-cluster'
+    scrape_interval: 10s
+    dns_sd_configs:
+      - names:
+          - 'tasks.vortexuipro-cluster'
+        type: 'A'
+        port: 8080
+    static_configs:
+      - targets:
+          - 'node-1:8080'       # Docker compose
+          - 'node-2:8080'
+          - 'node-3:8080'
+        labels:
+          service: 'cluster'
+    relabel_configs:
+      - source_labels: ['__meta_dns_name']
+        regex: '(.*)'
+        replacement: '${1}'
+        target_label: 'node'
+
+  # ── 3. Xray Core ─────────────────────────────────────────────────
+  - job_name: 'xray-core'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'localhost:10085'   # Xray API port
+        labels:
+          core: 'xray'
+          service: 'core'
+
+  # ── 4. Sing-box Core ─────────────────────────────────────────────
+  - job_name: 'singbox-core'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'localhost:9090'    # Sing-box metrics
+        labels:
+          core: 'singbox'
+          service: 'core'
+
+  # ── 5. Node Agent (gRPC) ─────────────────────────────────────────
+  - job_name: 'vortexuipro-node-agent'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'localhost:50051'   # gRPC agent port
+        labels:
+          service: 'node-agent'
+
+  # ── 6. Docker Daemon (if available) ──────────────────────────────
+  - job_name: 'docker'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'localhost:9323'    # Docker metrics
+        labels:
+          service: 'docker'
+
+  # ── 7. Node Exporter (system metrics, if installed) ──────────────
+  - job_name: 'node-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'localhost:9100'
+        labels:
+          service: 'system'

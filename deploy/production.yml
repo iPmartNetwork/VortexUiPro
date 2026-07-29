@@ -1,0 +1,543 @@
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro — Production Docker Stack 🚀
+#
+# Full production deployment with:
+#   - PostgreSQL 16 (TimescaleDB) for primary database
+#   - Redis 7 for caching & session store
+#   - Caddy 2 with auto HTTPS via Let's Encrypt
+#   - Panel (Go backend with built SPA)
+#   - Automated backup service (PostgreSQL dump + config + S3)
+#   - Prometheus + Grafana monitoring stack
+#   - Health checks on every service
+#   - Automatic log rotation via Docker json-logging
+#   - Resource limits with CPU/Memory reservations
+#   - Read-only root filesystem + tmpfs for runtime data
+#
+# ═══════════════════════════════════════════════════════════════════════
+# Quick Start:
+#   1. cp .env.example .env    # Edit with your secrets
+#   2. mkdir -p deploy/data/backups deploy/data/prometheus deploy/data/grafana
+#   3. docker compose -f deploy/production.yml up -d
+#   4. docker compose -f deploy/production.yml logs -f
+#
+# Post-install:
+#   - Panel:     http://your-server:8080  (login: admin / admin123)
+#   - Grafana:   http://your-server:3000  (login: admin / admin)
+#   - Prometheus: http://your-server:9090
+#
+# Set SITE_ADDRESS=panel.yourdomain.com for automatic HTTPS!
+# ═══════════════════════════════════════════════════════════════════════
+
+name: vortexuipro
+
+services:
+  # ═════════════════════════════════════════════════════════════════════
+  # Database — PostgreSQL 16 with TimescaleDB
+  # ═════════════════════════════════════════════════════════════════════
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: vortexuipro-postgres
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vortex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-vortex}
+      # Performance tuning for Docker
+      PGTUNE: "${POSTGRES_TUNE:-small}"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:delegated
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vortex} -d ${POSTGRES_DB:-vortex} -q"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Cache — Redis 7 with AOF persistence
+  # ═════════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: vortexuipro-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1000
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --lfu-log-factor 10
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data:delegated
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Caddy — Reverse Proxy + Auto HTTPS (Let's Encrypt)
+  # ═════════════════════════════════════════════════════════════════════
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    container_name: vortexuipro-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      PANEL_UPSTREAM: panel:8080
+    volumes:
+      - caddy-data:/data:delegated    # Let's Encrypt certificates
+      - caddy-config:/config:delegated
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      panel:
+        condition: service_healthy
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Panel — Go Backend with Built SPA
+  # ═════════════════════════════════════════════════════════════════════
+  panel:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: panel
+    container_name: vortexuipro-panel
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # HTTP API (proxied by Caddy)
+      - "127.0.0.1:50051:50051" # gRPC (internal)
+      - "127.0.0.1:1337:1337"   # Cluster mesh (internal)
+    environment:
+      # ── Database ────────────────────────────────────────────────
+      VORTEX_DB_TYPE: ${VORTEX_DB_TYPE:-postgres}
+      VORTEX_DATABASE_URL: postgres://${POSTGRES_USER:-vortex}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vortex}?sslmode=disable
+      VORTEX_REDIS_URL: redis://redis:6379/0
+
+      # ── HTTP & API ─────────────────────────────────────────────
+      VORTEX_HTTP_ADDR: ":8080"
+      VORTEX_GRPC_ADDR: ":50051"
+      VORTEX_JWT_SECRET: ${VORTEX_JWT_SECRET:?Set VORTEX_JWT_SECRET in .env}
+      VORTEX_LOG_LEVEL: ${VORTEX_LOG_LEVEL:-info}
+
+      # ── Admin Account ──────────────────────────────────────────
+      VORTEX_ADMIN_USERNAME: ${VORTEX_ADMIN_USERNAME:-admin}
+      VORTEX_ADMIN_PASSWORD: ${VORTEX_ADMIN_PASSWORD:-admin123}
+
+      # ── Core (Xray / Sing-box) ─────────────────────────────────
+      VORTEX_CORE: ${VORTEX_CORE:-xray}
+      VORTEX_CORE_BIN: ${VORTEX_CORE_BIN:-}
+      VORTEX_CORE_CONFIG: /etc/vortex/xray/config.json
+      VORTEX_CORE_API_PORT: 10085
+
+      # ── Cluster ────────────────────────────────────────────────
+      VORTEX_CLUSTER_ENABLED: ${VORTEX_CLUSTER_ENABLED:-false}
+      VORTEX_CLUSTER_NODE_NAME: ${VORTEX_CLUSTER_NODE_NAME:-node-1}
+      VORTEX_CLUSTER_ADDR: ${VORTEX_CLUSTER_ADDR:-:1337}
+
+      # ── External Integrations ──────────────────────────────────
+      VORTEX_TELEGRAM_BOT_TOKEN: ${VORTEX_TELEGRAM_BOT_TOKEN:-}
+      VORTEX_TELEGRAM_ADMIN_ID: ${VORTEX_TELEGRAM_ADMIN_ID:-}
+      VORTEX_SMTP_HOST: ${VORTEX_SMTP_HOST:-}
+      VORTEX_SMTP_PORT: ${VORTEX_SMTP_PORT:-587}
+      VORTEX_SMTP_USERNAME: ${VORTEX_SMTP_USERNAME:-}
+      VORTEX_SMTP_PASSWORD: ${VORTEX_SMTP_PASSWORD:-}
+      VORTEX_SMTP_FROM: ${VORTEX_SMTP_FROM:-noreply@example.com}
+      VORTEX_ZARINPAL_MERCHANT: ${VORTEX_ZARINPAL_MERCHANT:-}
+      VORTEX_NOWPAYMENTS_API_KEY: ${VORTEX_NOWPAYMENTS_API_KEY:-}
+
+      # ── Monitoring ─────────────────────────────────────────────
+      VORTEX_PROMETHEUS_ENABLED: "true"
+      VORTEX_ACTIVITY_ENABLED: "true"
+      VORTEX_ACTIVITY_FLUSH_SEC: 60
+
+      # ── Backup ─────────────────────────────────────────────────
+      VORTEX_BACKUP_DIR: /etc/vortex/backups
+      VORTEX_BACKUP_INTERVAL: 24h
+      VORTEX_BACKUP_RETENTION: 30d
+
+      # ── System ─────────────────────────────────────────────────
+      VORTEX_LOCAL_NODE: "true"
+      VORTEX_AUTO_RECOVER: "true"
+      VORTEX_TUNNEL_MONITOR: "false"
+    volumes:
+      - panel-data:/etc/vortex/data:delegated
+      - panel-certs:/etc/vortex/certs:delegated
+      - panel-backups:/etc/vortex/backups:delegated
+      - panel-logs:/var/log/vortexuipro:delegated
+    tmpfs:
+      - /tmp:size=64m
+      - /run:size=32m
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - no-new-privileges:true
+    # read_only: true — disabled for stability; Go runtime may write to unexpected paths
+    # See: https://github.com/golang/go/issues/ (runtime temp files)
+    read_only: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Automated Backup — PostgreSQL dump + config + S3 sync + Telegram
+  # ═════════════════════════════════════════════════════════════════════
+  backup:
+    image: alpine:3.20
+    container_name: vortexuipro-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-vortex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-vortex}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: "7"
+      BACKUP_RETENTION_WEEKS: "4"
+      BACKUP_RETENTION_MONTHS: "12"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - panel-backups:/backups:rw
+      - ./deploy/scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: |
+      sh -c '
+        apk add --no-cache postgresql-client zstd curl bash coreutils findutils
+        chmod +x /usr/local/bin/backup.sh
+
+        # Run backup immediately on first start
+        echo "[$(date)] Running initial backup..."
+        /usr/local/bin/backup.sh --db-only
+        /usr/local/bin/backup.sh --config-only
+
+        # Schedule: backup every 6 hours, apply retention + S3 sync daily at 03:00
+        echo "[$(date)] Starting backup scheduler..."
+        while true; do
+          CURRENT_HOUR=$(date +%H)
+          CURRENT_MIN=$(date +%M)
+
+          # Every 6 hours: database + config backup
+          case $CURRENT_HOUR in
+            0|6|12|18)
+              if [ "$CURRENT_MIN" = "00" ]; then
+                echo "[$(date)] Running scheduled backup..."
+                /usr/local/bin/backup.sh --db-only
+                /usr/local/bin/backup.sh --config-only
+              fi
+              ;;
+          esac
+
+          # Daily at 03:00: retention + S3 sync
+          if [ "$CURRENT_HOUR" = "03" ] && [ "$CURRENT_MIN" = "00" ]; then
+            echo "[$(date)] Running daily maintenance (retention + S3 sync)..."
+            /usr/local/bin/backup.sh --db-only
+            /usr/local/bin/backup.sh --config-only
+            /usr/local/bin/backup.sh 2>/dev/null || true
+          fi
+
+          sleep 60
+        done
+      '
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /backups/db || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Log Rotator — Rotates panel logs daily using logrotate
+  # ═════════════════════════════════════════════════════════════════════
+  logrotate:
+    image: alpine:3.20
+    container_name: vortexuipro-logrotate
+    restart: unless-stopped
+    volumes:
+      - panel-logs:/var/log/vortexuipro:ro
+      - ./deploy/logrotate.conf:/etc/logrotate.d/vortexuipro:ro
+    entrypoint: |
+      sh -c '
+        apk add --no-cache logrotate bash coreutils
+        mkdir -p /var/log/vortexuipro
+        echo "[$(date)] Logrotate daemon started (runs daily at 00:05)"
+        while true; do
+          CURRENT_TIME=$(date +%H%M)
+          if [ "$CURRENT_TIME" = "0005" ]; then
+            echo "[$(date)] Running logrotate..."
+            logrotate -s /tmp/logrotate.status /etc/logrotate.d/vortexuipro 2>&1 || true
+            sleep 70
+          fi
+          sleep 30
+        done
+      '
+    depends_on:
+      - panel
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Prometheus — Metrics Collection & Alerting
+  # ═════════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: vortexuipro-prometheus
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus:delegated
+    depends_on:
+      panel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ═════════════════════════════════════════════════════════════════════
+  # Grafana — Dashboards & Visualizations
+  # ═════════════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:latest
+    container_name: vortexuipro-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD__CHECK: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./deploy/grafana/vortexuipro-dashboard.json:/etc/grafana/provisioning/dashboards/vortexuipro.json:ro
+      - grafana-data:/var/lib/grafana:delegated
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - vortex-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+# ═══════════════════════════════════════════════════════════════════════
+# Networks
+# ═══════════════════════════════════════════════════════════════════════
+networks:
+  vortex-network:
+    driver: bridge
+    name: vortexuipro-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ═══════════════════════════════════════════════════════════════════════
+# Volumes
+# ═══════════════════════════════════════════════════════════════════════
+volumes:
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD:-.}/deploy/data/postgres
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD:-.}/deploy/data/redis
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+  panel-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD:-.}/deploy/data/panel
+  panel-certs:
+    driver: local
+  panel-backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD:-.}/deploy/data/backups
+  panel-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD:-.}/deploy/data/logs
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

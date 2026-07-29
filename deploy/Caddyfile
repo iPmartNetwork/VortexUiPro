@@ -1,0 +1,268 @@
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro — Caddy 2 Configuration 🚀
+#
+# Production-ready Caddyfile with:
+#   - Auto HTTPS via Let's Encrypt (when domain is set)
+#   - Rate limiting per IP
+#   - Comprehensive security headers
+#   - SPA file server with aggressive caching for assets
+#   - Reverse proxy for API/WS/Subscription endpoints
+#   - Prometheus metrics endpoint
+#   - Request logging
+#
+# Environment variables:
+#   SITE_ADDRESS   :80                → HTTP only (default, for IP-only setups)
+#   SITE_ADDRESS   panel.yourdomain.com → Auto HTTPS
+#   ACME_EMAIL     admin@example.com  → Certificate expiry notices
+#   PANEL_UPSTREAM panel:8080         → Backend service address
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+{
+  # ── Global Settings ───────────────────────────────────────────────
+  admin off
+  email {$ACME_EMAIL}
+  ocsp_stapling on
+  servers :80 {
+    protocols h1 h2 h3
+    trusted_proxies static private_ranges
+  }
+  # Rate limiting zones
+  rate_limit {
+    zone api {
+      match {path /api/*}
+      key {remote_ip}
+      window 1m
+      max 300
+    }
+    zone subscription {
+      match {path /sub/*}
+      key {remote_ip}
+      window 1m
+      max 600
+    }
+    zone auth {
+      match {path /api/v1/login}
+      key {remote_ip}
+      window 5m
+      max 20
+    }
+  }
+}
+
+{$SITE_ADDRESS::80} {
+  # ── Request Logging ───────────────────────────────────────────────
+  log {
+    output file /var/log/vortexuipro/caddy/access.log {
+      roll_size 100mb
+      roll_keep 5
+      roll_keep_for 720h
+    }
+    format json
+    level INFO
+  }
+
+  # ── Security Headers ──────────────────────────────────────────────
+  header {
+    # HSTS (force HTTPS when domain is configured)
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    # Prevent MIME-type sniffing
+    X-Content-Type-Options "nosniff"
+    # XSS protection (legacy browsers)
+    X-XSS-Protection "1; mode=block"
+    # Prevent clickjacking
+    X-Frame-Options "DENY"
+    # Referrer policy
+    Referrer-Policy "strict-origin-when-cross-origin"
+    # Content Security Policy
+    Content-Security-Policy "
+      default-src 'self';
+      script-src 'self' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob: https:;
+      font-src 'self' data:;
+      connect-src 'self' ws: wss: https:;
+      media-src 'self';
+      object-src 'none';
+      frame-ancestors 'none';
+      base-uri 'self';
+      form-action 'self';
+    "
+    # Permissions policy (restrict browser features)
+    Permissions-Policy "
+      accelerometer=(),
+      camera=(),
+      display-capture=(),
+      geolocation=(),
+      gyroscope=(),
+      magnetometer=(),
+      microphone=(),
+      midi=(),
+      payment=(),
+      usb=(),
+    "
+    # Remove server fingerprint
+    -Server
+  }
+
+  # ── Compression ───────────────────────────────────────────────────
+  encode zstd gzip {
+    minimum_length 256
+  }
+
+  # ── API Reverse Proxy ─────────────────────────────────────────────
+  handle /api/* {
+    request_body max_size 50mb
+    header {
+      Cache-Control "no-store, no-cache, must-revalidate"
+      Pragma "no-cache"
+    }
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080} {
+      # WebSocket support
+      header_up Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+      # Forward real IP
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+      # Health check
+      health_uri /api/v1/health
+      health_interval 30s
+      health_timeout 5s
+      max_fails 3
+      # Transparent WebSocket
+      flush_interval -1
+    }
+  }
+
+  # ── Subscription Endpoints ────────────────────────────────────────
+  handle /sub/* {
+    header Cache-Control "no-cache, private, max-age=60"
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080} {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      health_uri /api/v1/health
+      health_interval 60s
+    }
+  }
+
+  # ── WebSocket Endpoints ───────────────────────────────────────────
+  handle_path /ws* {
+    header Cache-Control "no-cache"
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080} {
+      # Upgrade to WebSocket
+      header_up Upgrade {http.request.header.Upgrade}
+      header_up Connection {http.request.header.Connection}
+      flush_interval -1
+      # Longer timeouts for persistent connections
+      dial_timeout 10s
+      read_timeout 24h
+      write_timeout 24h
+    }
+  }
+
+  # ── Terminal WebSocket ────────────────────────────────────────────
+  handle_path /api/v1/terminal/ws* {
+    header Cache-Control "no-cache"
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080} {
+      header_up Upgrade {http.request.header.Upgrade}
+      header_up Connection {http.request.header.Connection}
+      flush_interval -1
+      dial_timeout 10s
+      read_timeout 24h
+      write_timeout 24h
+    }
+  }
+
+  # ── Live Logs WebSocket ───────────────────────────────────────────
+  handle_path /api/v1/logs/ws* {
+    header Cache-Control "no-cache"
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080} {
+      header_up Upgrade {http.request.header.Upgrade}
+      header_up Connection {http.request.header.Connection}
+      flush_interval -1
+      dial_timeout 10s
+      read_timeout 24h
+      write_timeout 24h
+    }
+  }
+
+  # ── Health Checks ─────────────────────────────────────────────────
+  handle /health {
+    reverse_proxy {$PANEL_UPSTREAM:panel:8080}
+  }
+
+  handle /readyz {
+    respond "OK" 200 {
+      close
+    }
+  }
+
+  # ── Prometheus Metrics ────────────────────────────────────────────
+  handle /metrics {
+    header Cache-Control "no-cache"
+    # Restrict to internal network
+    @internal {
+      remote_ip private_ranges
+    }
+    handle @internal {
+      reverse_proxy {$PANEL_UPSTREAM:panel:8080}
+    }
+    handle {
+      abort 403 "Metrics endpoint restricted to internal network"
+    }
+  }
+
+  # ── Security Probes (Block common scanners) ───────────────────────
+  @badpaths {
+    path /wp-admin* /wp-content* /xmlrpc* /.env* /.git* /admin* /phpmyadmin*
+    path /mysql* /sql* /backup* /debug* /config* /shell* /cmd*
+  }
+  handle @badpaths {
+    abort 444
+    log {
+      level ERROR
+      output file /var/log/vortexuipro/caddy/blocked.log {
+        roll_size 10mb
+        roll_keep 7
+      }
+    }
+  }
+
+  # ── Static Files (SPA) ────────────────────────────────────────────
+  handle {
+    root * /usr/share/caddy
+
+    # Aggressive caching for static assets (fingerprinted filenames)
+    @static {
+      path *.js *.css *.svg *.woff2 *.png *.jpg *.ico *.webp
+    }
+    header @static Cache-Control "public, immutable, max-age=31536000"
+
+    # HTML files: no cache (SPA needs fresh index.html)
+    @html {
+      path *.html
+    }
+    header @html Cache-Control "no-cache, must-revalidate"
+
+    file_server {
+      precompress for zst gzip
+    }
+
+    # SPA fallback: all unmatched paths → index.html
+    try_files {path} /index.html
+  }
+
+  # ── Custom Error Pages ────────────────────────────────────────────
+  handle_errors {
+    @404 status 404
+    handle @404 {
+      header Content-Type "application/json; charset=utf-8"
+      respond `{"error":"not_found","message":"The requested resource was not found"}` 404
+    }
+    @500 status 500 502 503 504
+    handle @500 {
+      header Content-Type "application/json; charset=utf-8"
+      respond `{"error":"server_error","message":"An internal server error occurred"}` 503
+    }
+  }
+}

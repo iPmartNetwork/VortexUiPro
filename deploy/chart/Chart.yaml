@@ -1,0 +1,42 @@
+apiVersion: v2
+name: vortexuipro
+description: VortexUiPro — Next-Gen Proxy Management Panel (Helm Chart)
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+icon: https://raw.githubusercontent.com/iPmartNetwork/VortexUiPro/master/web/public/favicon.ico
+home: https://github.com/iPmartNetwork/VortexUiPro
+sources:
+  - https://github.com/iPmartNetwork/VortexUiPro
+maintainers:
+  - name: VortexUiPro Team
+    email: team@vortexuipro.dev
+keywords:
+  - proxy
+  - vpn
+  - xray
+  - sing-box
+  - panel
+  - management
+
+dependencies:
+  - name: postgresql
+    version: ~15.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+    alias: postgresql
+  - name: redis
+    version: ~19.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+    alias: redis
+  - name: prometheus
+    version: ~25.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+    alias: prometheus
+  - name: grafana
+    version: ~7.0
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+    alias: grafana

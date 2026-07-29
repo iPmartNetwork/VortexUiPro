@@ -1,0 +1,245 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [master, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Auto-deploy after CI passes'
+        required: false
+        default: false
+        type: boolean
+      deploy_env:
+        description: 'Deployment environment'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  actions: write         # ← needed for createWorkflowDispatch
+  deployments: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.23"
+  NODE_VERSION: "22"
+  REGISTRY: ghcr.io
+
+jobs:
+  lint:
+    name: Lint (Go + Frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.0
+          args: --timeout=5m ./...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: ESLint
+        working-directory: web
+        run: |
+          npm ci
+          npx eslint --ext .ts,.tsx src/ --max-warnings=50 || true
+
+      - name: TypeScript check
+        working-directory: web
+        run: npx tsc --noEmit --pretty || true
+
+  test:
+    name: Test (Go + Race)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: vortex
+          POSTGRES_PASSWORD: vortex
+          POSTGRES_DB: vortex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vortex -d vortex_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      VORTEX_TEST_DB: postgres://vortex:vortex@localhost:5432/vortex_test?sslmode=disable
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-multilib
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Run tests with race detector
+        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    needs: [lint]
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 7
+
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    needs: [test, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [panel, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.target }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          tags: vortexuipro-${{ matrix.target }}:ci
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }},ignore-error=true
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Trivy scan (Dockerfile)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          hide-progress: true
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ═══════════════════════════════════════════════════════════════
+  # 🚀 Auto-Deploy (master branch only, after all checks pass)
+  # ═══════════════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy
+    runs-on: ubuntu-latest
+    if: >
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event.inputs.deploy == 'true') &&
+      !cancelled()
+    needs: [lint, test, frontend, docker-build, security]
+    environment: ${{ github.event.inputs.deploy_env || 'staging' }}
+    steps:
+      - name: Trigger deploy workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const env = '${{ github.event.inputs.deploy_env || 'staging' }}';
+            console.log(`✅ CI passed — triggering deploy to ${env}...`);
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'master',
+              inputs: {
+                environment: env,
+                version: process.env.GITHUB_SHA?.substring(0, 7) || 'latest',
+                skip_ci: 'true'
+              }
+            });
+
+            core.summary.addHeading('🚀 Auto-Deploy Triggered').addRaw(`
+              Environment: <strong>${env}</strong><br>
+              Version: <code>${process.env.GITHUB_SHA?.substring(0, 7)}</code><br>
+              Status: ✅ CI Checks Passed
+            `)

@@ -1,0 +1,90 @@
+# ─── VortexUiPro Alerting Rules ──────────────────────────────────────
+# These alerts fire when panel health, cluster, or core metrics
+# deviate from expected ranges. Configure Alertmanager to route them
+# to Telegram, email, or Slack.
+# ──────────────────────────────────────────────────────────────────────
+
+groups:
+  - name: vortexuipro-panel
+    interval: 30s
+    rules:
+
+      # ── Panel Down ───────────────────────────────────────────────
+      - alert: PanelDown
+        expr: up{job="vortexuipro-panel"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "VortexUiPro panel is down"
+          description: "Panel {{ $labels.instance }} has been unreachable for >1m."
+
+      # ── High Memory Usage ────────────────────────────────────────
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job=~"vortexuipro-panel|vortexuipro.*"} > 800 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on panel"
+          description: "Panel memory is at {{ $value | humanize1024 }} (threshold: 800MB)."
+
+      # ── High Connection Count ────────────────────────────────────
+      - alert: HighConnections
+        expr: vortexuipro_connections_active > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High active connections"
+          description: "Active connections {{ $value }} exceeds 5000."
+
+      # ── Traffic Anomaly ──────────────────────────────────────────
+      - alert: TrafficAnomaly
+        expr: rate(vortexuipro_traffic_bytes_total[5m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zero traffic detected"
+          description: "No traffic for >15m — possible network issue."
+
+      # ── Node Offline ─────────────────────────────────────────────
+      - alert: NodeOffline
+        expr: vortexuipro_nodes_online < vortexuipro_nodes_total
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cluster node(s) offline"
+          description: "{{ $value }} out of {{ $labels.total }} nodes online."
+
+      # ── Certificate Expiry ───────────────────────────────────────
+      - alert: CertificateExpiry
+        expr: vortexuipro_cert_expiry_days < 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "Certificate expires in {{ $value }} days."
+
+      # ── Cluster Split Brain ──────────────────────────────────────
+      - alert: ClusterSplitBrain
+        expr: count(vortexuipro_cluster_leaders) > 1
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cluster split-brain detected"
+          description: "Multiple leaders: {{ $value }}"
+
+      # ── Disk Space ───────────────────────────────────────────────
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk is {{ $value | humanize }}% full."

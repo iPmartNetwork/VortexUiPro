@@ -1,0 +1,291 @@
+# ═══════════════════════════════════════════════════════════════════════
+# VortexUiPro Helm Chart — Complete Values
+#
+# Default configuration for deploying VortexUiPro on Kubernetes.
+# Override with: helm install -f my-values.yaml vortexuipro ./deploy/chart
+#
+# Quick Start:
+#   helm repo add bitnami https://charts.bitnami.com/bitnami
+#   helm dependency update deploy/chart
+#   helm install vortexuipro deploy/chart \
+#     --set panel.secrets.jwtSecret="my-jwt-secret" \
+#     --set panel.secrets.databasePassword="my-db-pass"
+# ═══════════════════════════════════════════════════════════════════════
+
+# ─── Global Settings ─────────────────────────────────────────────────
+global:
+  imageRegistry: ghcr.io
+  imagePullSecrets: []
+  storageClass: ""
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ─── Naming Overrides ───────────────────────────────────────────────
+# Override the full name of resources (default: {release-name}-vortexuipro)
+fullnameOverride: ""
+# Override the base chart name used in resource names (default: vortexuipro)
+nameOverride: ""
+
+  # Network policies — requires CNI plugin (Calico, Cilium, etc.)
+  networkPolicies:
+    enabled: true
+
+# ─── Image Configuration ────────────────────────────────────────────
+image:
+  repository: ghcr.io/ipmartnetwork/vortexuipro
+  tag: "latest"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ─── Service Account ────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+
+# ─── Panel (Go Backend) ─────────────────────────────────────────────
+panel:
+  enabled: true
+  name: panel
+  port: 8080
+  grpcPort: 50051
+  clusterPort: 1337
+  serviceType: ClusterIP
+
+  replicaCount: 2
+
+  # Environment variables (non-sensitive)
+  env:
+    VORTEX_DB_TYPE: postgres
+    VORTEX_LOG_LEVEL: info
+    VORTEX_CORE: xray
+    VORTEX_PROMETHEUS_ENABLED: "true"
+    VORTEX_CLUSTER_ENABLED: "false"
+    VORTEX_CLUSTER_NODE_NAME: ""
+    VORTEX_CLUSTER_PEERS: ""
+    VORTEX_CLUSTER_REGION: default
+    VORTEX_ACTIVITY_ENABLED: "true"
+    VORTEX_ACTIVITY_FLUSH_SEC: "60"
+    VORTEX_AUTO_RECOVER: "true"
+    VORTEX_LOCAL_NODE: "true"
+    VORTEX_TELEGRAM_BOT_TOKEN: ""
+    VORTEX_TELEGRAM_ADMIN_ID: ""
+    VORTEX_SMTP_HOST: ""
+    VORTEX_SMTP_PORT: "587"
+    VORTEX_SMTP_FROM: ""
+    VORTEX_ZARINPAL_MERCHANT: ""
+    VORTEX_NOWPAYMENTS_API_KEY: ""
+
+  # Secrets (set via --set or external secret)
+  secrets:
+    jwtSecret: ""
+    databasePassword: ""
+    existingSecret: ""
+
+  # Resource limits
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 1
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 8080
+    initialDelaySeconds: 15
+    periodSeconds: 15
+
+  # Persistent storage
+  persistence:
+    enabled: true
+    data:
+      size: 1Gi
+      accessMode: ReadWriteOnce
+    backups:
+      size: 5Gi
+      accessMode: ReadWriteOnce
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    customMetrics: []
+
+  # PodDisruptionBudget (for HA during node maintenance)
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    # maxUnavailable: 1  (mutually exclusive with minAvailable)
+
+# ─── Web (Caddy + SPA) ─────────────────────────────────────────────
+web:
+  enabled: true
+  name: web
+  port: 80
+  securePort: 443
+  serviceType: ClusterIP
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/ipmartnetwork/vortexuipro-web
+    tag: "latest"
+
+  env:
+    SITE_ADDRESS: ":80"
+    ACME_EMAIL: ""
+    PANEL_UPSTREAM: "vortexuipro-panel:8080"
+
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 100m
+    limits:
+      memory: 128Mi
+      cpu: 500m
+
+  # Ingress (external access with TLS)
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: panel.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: vortexuipro-tls
+        hosts:
+          - panel.example.com
+
+  # PodDisruptionBudget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# ─── Automated Backups ──────────────────────────────────────────────
+backup:
+  enabled: true
+
+  # Cron schedule (default: every 6 hours)
+  schedule: "0 */6 * * *"
+  startingDeadlineSeconds: 300
+
+  # Image
+  image:
+    repository: alpine
+    tag: "3.20"
+
+  # Retention
+  retentionDays: 7
+  retentionWeeks: 4
+  retentionMonths: 12
+
+  # Telegram notifications
+  telegram:
+    enabled: false
+    botToken: ""
+    chatId: ""
+
+  # S3 remote storage
+  s3:
+    enabled: false
+    endpoint: ""
+    bucket: ""
+    accessKey: ""
+    secretKey: ""
+
+# ─── PostgreSQL (Bitnami sub-chart) ─────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: vortex
+    database: vortex
+    existingSecret: vortexuipro-secrets
+    secretKeys:
+      adminPasswordKey: database-password
+  primary:
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 200m
+      limits:
+        memory: 1Gi
+        cpu: 1
+    persistence:
+      size: 8Gi
+    initdb:
+      scripts:
+        init.sql: |
+          CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+# ─── Redis (Bitnami sub-chart) ──────────────────────────────────────
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    persistence:
+      size: 1Gi
+
+# ─── Prometheus (sub-chart) ─────────────────────────────────────────
+prometheus:
+  enabled: false
+  alertmanager:
+    enabled: false
+  server:
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 200m
+    persistentVolume:
+      size: 10Gi
+
+  # ServiceMonitor for auto-metrics scraping
+  serviceMonitor:
+    enabled: true
+    scrapeInterval: 15s
+    scrapeTimeout: 10s
+    additionalLabels:
+      release: prometheus
+
+# ─── Grafana (sub-chart) ────────────────────────────────────────────
+grafana:
+  enabled: false
+  adminPassword: admin
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      folder: /tmp/dashboards
+      provider:
+        name: vortexuipro
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /tmp/dashboards

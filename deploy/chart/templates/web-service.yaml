@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-web
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  type: {{ .Values.web.serviceType | default "ClusterIP" }}
+  selector:
+    {{- include "vortexuipro.webSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.web.port }}
+      targetPort: http
+      protocol: TCP
+    - name: https
+      port: {{ .Values.web.securePort }}
+      targetPort: https
+      protocol: TCP

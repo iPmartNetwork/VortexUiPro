@@ -1,0 +1,124 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-backup
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: {{ .Values.backup.startingDeadlineSeconds | default 300 }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: POSTGRES_HOST
+                  value: {{ .Release.Name }}-postgresql
+                - name: POSTGRES_PORT
+                  value: "5432"
+                - name: POSTGRES_USER
+                  value: {{ .Values.postgresql.auth.username }}
+                - name: POSTGRES_DB
+                  value: {{ .Values.postgresql.auth.database }}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.panel.secrets.existingSecret | default (printf "%s-secrets" (include "vortexuipro.fullname" .)) }}
+                      key: database-password
+                - name: BACKUP_DIR
+                  value: /backups
+                - name: BACKUP_RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | default "7" | quote }}
+                - name: BACKUP_RETENTION_WEEKS
+                  value: {{ .Values.backup.retentionWeeks | default "4" | quote }}
+                - name: BACKUP_RETENTION_MONTHS
+                  value: {{ .Values.backup.retentionMonths | default "12" | quote }}
+                {{- if .Values.backup.telegram.enabled }}
+                - name: TELEGRAM_BOT_TOKEN
+                  value: {{ .Values.backup.telegram.botToken | quote }}
+                - name: TELEGRAM_CHAT_ID
+                  value: {{ .Values.backup.telegram.chatId | quote }}
+                {{- end }}
+                {{- if .Values.backup.s3.enabled }}
+                - name: S3_ENDPOINT
+                  value: {{ .Values.backup.s3.endpoint | quote }}
+                - name: S3_BUCKET
+                  value: {{ .Values.backup.s3.bucket | quote }}
+                - name: S3_ACCESS_KEY
+                  value: {{ .Values.backup.s3.accessKey | quote }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "vortexuipro.fullname" . }}-backup-s3
+                      key: secret-key
+                {{- end }}
+                {{- if .Values.backup.telegram.enabled }}
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "vortexuipro.fullname" . }}-backup-telegram
+                      key: bot-token
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "vortexuipro.fullname" . }}-backup-telegram
+                      key: chat-id
+                {{- end }}
+              volumeMounts:
+                - name: backup-script
+                  mountPath: /usr/local/bin/backup.sh
+                  subPath: backup.sh
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+              command:
+                - /usr/local/bin/backup.sh
+          volumes:
+            - name: backup-script
+              configMap:
+                name: {{ include "vortexuipro.fullname" . }}-backup-script
+                defaultMode: 0755
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ include "vortexuipro.fullname" . }}-panel-backups
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-backup-script
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    echo "[$(date)] Starting database backup..."
+
+    mkdir -p "${BACKUP_DIR}/db"
+
+    PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump \
+      -h "${POSTGRES_HOST}" \
+      -p "${POSTGRES_PORT}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      --clean --if-exists --no-owner --no-privileges \
+      | zstd -f -q -o "${BACKUP_DIR}/db/vortex-${TIMESTAMP}.sql.zst"
+
+    find "${BACKUP_DIR}/db" -name "*.sql.zst" -mtime "+${BACKUP_RETENTION_DAYS}" -delete 2>/dev/null || true
+    echo "[$(date)] Backup complete: ${BACKUP_DIR}/db/vortex-${TIMESTAMP}.sql.zst"
+{{- end }}

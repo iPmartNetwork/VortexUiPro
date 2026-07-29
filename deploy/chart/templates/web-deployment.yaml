@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vortexuipro.fullname" . }}-web
+  labels:
+    {{- include "vortexuipro.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicaCount | default .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vortexuipro.webSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vortexuipro.webSelectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vortexuipro.serviceAccountName" . }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.web.port }}
+              name: http
+              protocol: TCP
+            - containerPort: {{ .Values.web.securePort }}
+              name: https
+              protocol: TCP
+          env:
+            - name: SITE_ADDRESS
+              value: {{ .Values.web.env.SITE_ADDRESS | quote }}
+            - name: ACME_EMAIL
+              value: {{ .Values.web.env.ACME_EMAIL | default "" | quote }}
+            - name: PANEL_UPSTREAM
+              value: {{ .Values.web.env.PANEL_UPSTREAM | quote }}
+          livenessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.web.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.web.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
