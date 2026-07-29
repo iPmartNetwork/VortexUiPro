@@ -1,0 +1,80 @@
+# ─── Git ────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ─── Go ─────────────────────────────────────────────────────────────
+/bin/
+/build/
+*.exe
+*.test
+*.out
+vendor/
+
+# ─── Node / Frontend ────────────────────────────────────────────────
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+*.js.map
+npm-debug.log*
+
+# ─── Environment ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.example
+
+# ─── OS ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDE / Editor ───────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Logs / Temp ───────────────────────────────────────────────────
+*.log
+/tmp/
+temp/
+*.tmp
+*.bak
+
+# ─── Database ───────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+data/
+
+# ─── TLS / Certs ────────────────────────────────────────────────────
+*.key
+*.pem
+*.cert
+certs/
+
+# ─── Documentation (already in docs/ but not needed at runtime) ─────
+docs/
+*.md
+CHANGELOG.md
+README.md
+README.fa.md
+mkdocs.yml
+
+# ─── CI / GitHub ────────────────────────────────────────────────────
+.github/
+*.yml
+*.yaml
+
+# ─── Misc ───────────────────────────────────────────────────────────
+Dockerfile
+deploy/Dockerfile
+deploy/web.Dockerfile
+deploy/Dockerfile.goreleaser
+docker-compose.yml
+*.tar.gz
+*.zip
