@@ -85,9 +85,7 @@ func (s *PluginService) GetPlugin(id string) (*PluginInfo, error) {
 
 // LoadPlugin is defined in plugin_loader.go (Linux/Darwin only).
 // On Windows, it returns a "not supported" error.
-func (s *PluginService) LoadPlugin(path, id, name, version string) error {
-	return fmt.Errorf("plugin loading not supported on this platform")
-}
+// See: plugin_stub.go for the Windows/other platform stub.
 
 func (s *PluginService) UnloadPlugin(id string) error {
 	s.mu.Lock()
