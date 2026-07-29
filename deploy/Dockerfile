@@ -28,6 +28,7 @@ RUN npm run build
 # ── Stage 2: Backend (panel binary, needs web dist) ────────────────
 FROM golang:1.24-alpine AS backend-builder
 WORKDIR /app
+ENV GOTOOLCHAIN=local
 RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
 RUN go mod download
@@ -39,6 +40,7 @@ RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/l
 # ── Stage 3: Agent (lightweight node binary, NO frontend deps!) ────
 FROM golang:1.24-alpine AS agent-builder
 WORKDIR /app
+ENV GOTOOLCHAIN=local
 COPY go.mod go.sum ./
 RUN go mod download
 COPY internal/ ./internal/

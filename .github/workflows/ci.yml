@@ -54,6 +54,8 @@ jobs:
           cache: true
 
       - name: Go Vet
+        env:
+          GOTOOLCHAIN: local
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc
           go vet ./...
@@ -109,6 +111,8 @@ jobs:
           sudo apt-get install -y -qq gcc-multilib
 
       - name: go vet
+        env:
+          GOTOOLCHAIN: local
         run: go vet ./...
 
       - name: Run tests with race detector
