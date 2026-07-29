@@ -9,15 +9,6 @@ import (
 )
 
 func TestAdminService_Login(t *testing.T) {
-	// Initialize in-memory SQLite
-	if err := database.InitDB(database.Config{
-		Type:     "sqlite",
-		DSN:      ":memory:",
-		LogLevel: "silent",
-	}); err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-
 	bus := events.Nop{}
 	svc := NewAdminService("test-secret", bus)
 
