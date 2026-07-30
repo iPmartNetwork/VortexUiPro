@@ -145,8 +145,8 @@ jobs:
         id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: latest
-          args: release --clean --timeout 90m --verbose --skip=docker,docker_manifests
+          version: v2.1.0
+          args: release --clean --timeout 90m --skip=docker,docker_manifests
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
