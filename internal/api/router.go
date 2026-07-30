@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -665,6 +666,24 @@ func NewRouter(
 	}
 
 	engine.NoRoute(func(c *gin.Context) {
+		// Serve web UI from VORTEX_WEB_ROOT env or default /usr/share/vortexuipro/web
+		webRoot := os.Getenv("VORTEX_WEB_ROOT")
+		if webRoot == "" {
+			webRoot = "/usr/share/vortexuipro/web"
+		}
+		// Try to serve the requested file
+		requestPath := c.Request.URL.Path
+		filePath := webRoot + requestPath
+		if _, err := os.Stat(filePath); err == nil {
+			c.File(filePath)
+			return
+		}
+		// SPA fallback — serve index.html for all unmatched routes
+		indexPath := webRoot + "/index.html"
+		if _, err := os.Stat(indexPath); err == nil {
+			c.File(indexPath)
+			return
+		}
 		c.JSON(404, gin.H{"error": "not found"})
 	})
 

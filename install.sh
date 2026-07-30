@@ -160,6 +160,20 @@ download_binary() {
             build_from_source
         fi
         rm -f /tmp/vortexuipro.tar.gz
+
+        # Download web UI
+        echo -e "${yellow}Downloading web UI...${plain}"
+        local WEB_URL="https://github.com/${VORTEX_REPO}/releases/download/v${VORTEX_VERSION}/vortexuipro-web.tar.gz"
+        mkdir -p /usr/share/vortexuipro/web
+        if curl -fsSL --connect-timeout 10 "${WEB_URL}" -o /tmp/vortexuipro-web.tar.gz 2>/dev/null; then
+            tar -xzf /tmp/vortexuipro-web.tar.gz -C /usr/share/vortexuipro/web/ 2>/dev/null || \
+            tar -xzf /tmp/vortexuipro-web.tar.gz -C /tmp/ && cp -r /tmp/dist/* /usr/share/vortexuipro/web/ 2>/dev/null || true
+            rm -f /tmp/vortexuipro-web.tar.gz
+            echo -e "${green}✓ Web UI installed${plain}"
+        else
+            echo -e "${yellow}Web UI not in release, will build from source...${plain}"
+            build_web_from_source
+        fi
     else
         echo -e "${yellow}Release binary not found, building from source...${plain}"
         build_from_source
@@ -212,9 +226,28 @@ build_from_source() {
     git clone --depth 1 https://github.com/${VORTEX_REPO}.git .
     
     echo -e "${yellow}Building backend...${plain}"
-    go build -o vortexuipro -ldflags="-s -w" ./cmd/panel
+    CGO_ENABLED=0 go build -o vortexuipro -ldflags="-s -w" ./cmd/panel
 
     cp vortexuipro ${VORTEX_BIN}
+
+    # Install web UI files
+    echo -e "${yellow}Installing web UI...${plain}"
+    mkdir -p /usr/share/vortexuipro/web
+    if [[ -d web/dist ]]; then
+        cp -r web/dist/* /usr/share/vortexuipro/web/
+        echo -e "${green}✓ Web UI installed from source${plain}"
+    else
+        # Build frontend if node is available
+        if command -v npm &>/dev/null; then
+            echo -e "${yellow}Building frontend...${plain}"
+            cd web && npm ci --prefer-offline --no-audit && npm run build && cd ..
+            cp -r web/dist/* /usr/share/vortexuipro/web/
+            echo -e "${green}✓ Web UI built and installed${plain}"
+        else
+            echo -e "${yellow}Warning: npm not found, web UI not installed${plain}"
+        fi
+    fi
+
     cd /
     rm -rf ${TMPDIR}
     
@@ -250,6 +283,9 @@ VORTEX_CORE_API_PORT=10085
 
 # Activity Tracking
 VORTEX_ACTIVITY_FLUSH_SEC=30
+
+# Web UI
+VORTEX_WEB_ROOT=/usr/share/vortexuipro/web
 
 # Telegram Bot (optional — set your token)
 # VORTEX_TELEGRAM_BOT_TOKEN=
