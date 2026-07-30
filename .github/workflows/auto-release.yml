@@ -141,12 +141,19 @@ jobs:
         id: owner
         run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: GoReleaser (binaries only — skip docker for diagnosis)
+      - name: Install GoReleaser
+        run: |
+          curl -sSLf "https://github.com/goreleaser/goreleaser/releases/download/v2.1.0/goreleaser_Linux_x86_64.tar.gz" | tar -xz -C /usr/local/bin goreleaser
+          goreleaser --version
+
+      - name: GoReleaser
         id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: v2.1.0
-          args: release --clean --timeout 90m --skip=docker,docker_manifests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
+          GOTOOLCHAIN: local
+        run: |
+          goreleaser release --clean --timeout 90m --skip=docker,docker_manifests 2>&1 || (echo "GoReleaser failed with exit $?"; exit 1)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
