@@ -130,6 +130,10 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT || github.token }}
 
+      - name: Set lowercase registry owner
+        id: owner
+        run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -137,7 +141,7 @@ jobs:
           args: release --clean --timeout 90m
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_OWNER: ${{ github.repository_owner }}
+          REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
           GOTOOLCHAIN: local
 
       - name: Upload dist artifacts
