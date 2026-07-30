@@ -22,8 +22,7 @@ env:
   - CGO_ENABLED=0
 
 before:
-  hooks:
-    - go mod download
+  hooks: []
 
 # ═══════════════════════════════════════════════════════════════════════
 # 🏗️ Builds
