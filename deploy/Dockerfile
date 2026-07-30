@@ -28,12 +28,10 @@ RUN npm run build
 # ── Stage 2: Backend (panel binary, needs web dist) ────────────────
 # Use --platform=$BUILDPLATFORM so the builder runs native (amd64)
 # and cross-compiles for the target platform.
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
 WORKDIR /app
-ENV GOTOOLCHAIN=local
 ARG TARGETARCH
 ARG TARGETOS=linux
-RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
@@ -45,9 +43,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -o /usr/local/bin/vortexuipro ./cmd/panel
 
 # ── Stage 3: Agent (lightweight node binary, NO frontend deps!) ────
-FROM golang:1.24-alpine AS agent-builder
+FROM golang:1.25-alpine AS agent-builder
 WORKDIR /app
-ENV GOTOOLCHAIN=local
 COPY go.mod go.sum ./
 RUN go mod download
 COPY internal/ ./internal/
