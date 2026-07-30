@@ -1,7 +1,8 @@
 package api
 
 import (
-	"os"
+	"io/fs"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"vortexuipro/internal/cluster"
 	"vortexuipro/internal/core"
 	"vortexuipro/internal/service"
+	"vortexuipro/web"
 )
 
 type Router struct {
@@ -665,27 +667,23 @@ func NewRouter(
 		hc.GET("/recovery-history", healthHandler.GetRecoveryHistory)
 	}
 
-	engine.NoRoute(func(c *gin.Context) {
-		// Serve web UI from VORTEX_WEB_ROOT env or default /usr/share/vortexuipro/web
-		webRoot := os.Getenv("VORTEX_WEB_ROOT")
-		if webRoot == "" {
-			webRoot = "/usr/share/vortexuipro/web"
-		}
-		// Try to serve the requested file
-		requestPath := c.Request.URL.Path
-		filePath := webRoot + requestPath
-		if _, err := os.Stat(filePath); err == nil {
-			c.File(filePath)
-			return
-		}
-		// SPA fallback — serve index.html for all unmatched routes
-		indexPath := webRoot + "/index.html"
-		if _, err := os.Stat(indexPath); err == nil {
-			c.File(indexPath)
-			return
-		}
-		c.JSON(404, gin.H{"error": "not found"})
-	})
+	// ─── Static Web UI (embedded) ────────────────────────────────
+	distFS, err := fs.Sub(web.Dist, "dist")
+	if err == nil {
+		engine.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			// Try to serve the file, fallback to index.html for SPA routing
+			if _, err := distFS.Open(path[1:]); err == nil && path != "/" {
+				http.FileServer(http.FS(distFS)).ServeHTTP(c.Writer, c.Request)
+			} else {
+				c.FileFromFS("index.html", http.FS(distFS))
+			}
+		})
+	} else {
+		engine.NoRoute(func(c *gin.Context) {
+			c.JSON(404, gin.H{"error": "not found"})
+		})
+	}
 
 	return &Router{engine: engine, Hub: wsHub}
 }
