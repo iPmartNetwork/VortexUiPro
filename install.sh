@@ -23,7 +23,7 @@ plain='\033[0m'
 
 # ─── Defaults ──────────────────────────────────────────────────────────
 VORTEX_REPO="iPmartNetwork/VortexUiPro"
-VORTEX_VERSION="0.0.1"
+VORTEX_VERSION="0.1.1"
 VORTEX_FOLDER="/usr/local/vortexuipro"
 VORTEX_DATA="/etc/vortexuipro"
 VORTEX_BIN="/usr/local/bin/vortexuipro"
@@ -173,26 +173,36 @@ download_binary() {
 build_from_source() {
     echo -e "${yellow}Building from source (this may take a while)...${plain}"
 
-    # Install Go
-    if ! command -v go &>/dev/null; then
-        case "${OS}" in
-            ubuntu | debian | armbian)
-                apt-get install -y -qq golang-go || apt-get install -y -qq golang
-                ;;
-            fedora | rhel | centos)
-                dnf install -y -q golang
-                ;;
-            arch | manjaro)
-                pacman -Sy --noconfirm go
-                ;;
-            alpine)
-                apk add --no-cache go gcc musl-dev
-                ;;
-            *)
-                echo -e "${red}Please install Go manually and re-run.${plain}"
-                exit 1
-                ;;
+    # Check Go version — need 1.21+
+    local GO_OK=0
+    if command -v go &>/dev/null; then
+        local GO_VER
+        GO_VER=$(go version | awk '{print $3}' | sed 's/go//')
+        local GO_MAJOR GO_MINOR
+        GO_MAJOR=$(echo "$GO_VER" | cut -d. -f1)
+        GO_MINOR=$(echo "$GO_VER" | cut -d. -f2)
+        if [[ "$GO_MAJOR" -gt 1 ]] || [[ "$GO_MAJOR" -eq 1 && "$GO_MINOR" -ge 21 ]]; then
+            GO_OK=1
+        else
+            echo -e "${yellow}Go ${GO_VER} is too old (need 1.21+), installing newer Go...${plain}"
+        fi
+    fi
+
+    if [[ "$GO_OK" -eq 0 ]]; then
+        local GO_INSTALL_VERSION="1.23.0"
+        local GO_ARCH
+        case "$(uname -m)" in
+            x86_64) GO_ARCH="amd64" ;;
+            aarch64|arm64) GO_ARCH="arm64" ;;
+            *) GO_ARCH="amd64" ;;
         esac
+        echo -e "${yellow}Installing Go ${GO_INSTALL_VERSION}...${plain}"
+        curl -fsSL "https://go.dev/dl/go${GO_INSTALL_VERSION}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf /tmp/go.tar.gz
+        rm -f /tmp/go.tar.gz
+        export PATH=$PATH:/usr/local/go/bin
+        echo -e "${green}✓ Go $(go version | awk '{print $3}') installed${plain}"
     fi
 
     local TMPDIR=$(mktemp -d)
