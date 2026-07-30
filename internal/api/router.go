@@ -3,6 +3,7 @@ package api
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -670,14 +671,18 @@ func NewRouter(
 	// ─── Static Web UI (embedded) ────────────────────────────────
 	distFS, err := fs.Sub(web.Dist, "dist")
 	if err == nil {
+		fileServer := http.FileServer(http.FS(distFS))
 		engine.NoRoute(func(c *gin.Context) {
 			path := c.Request.URL.Path
-			// Try to serve the file, fallback to index.html for SPA routing
-			if _, err := distFS.Open(path[1:]); err == nil && path != "/" {
-				http.FileServer(http.FS(distFS)).ServeHTTP(c.Writer, c.Request)
-			} else {
-				c.FileFromFS("index.html", http.FS(distFS))
+			// Check if file exists in dist
+			f, ferr := distFS.Open(strings.TrimPrefix(path, "/"))
+			if ferr == nil {
+				f.Close()
+				fileServer.ServeHTTP(c.Writer, c.Request)
+				return
 			}
+			// SPA fallback — serve index.html for all unknown routes
+			c.FileFromFS("index.html", http.FS(distFS))
 		})
 	} else {
 		engine.NoRoute(func(c *gin.Context) {
