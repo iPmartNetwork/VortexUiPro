@@ -223,7 +223,7 @@ release:
     owner: "{{ .Env.REGISTRY_OWNER }}"
     name: VortexUiPro
   prerelease: auto
-  mode: append
+  mode: replace
   header: |
     # 🚀 VortexUiPro {{ .Tag }}
 

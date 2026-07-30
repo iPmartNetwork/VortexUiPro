@@ -30,6 +30,7 @@ on:
 permissions:
   contents: write
   packages: write
+  actions: write   # ← needed to trigger auto-release workflow
 
 env:
   GO_VERSION: "1.24"
