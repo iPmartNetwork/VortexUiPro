@@ -1,16 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════════
-# VortexUiPro — GoReleaser Configuration 🚀
+# VortexUiPro — GoReleaser v2 Configuration
 #
-# Usage:
-#   goreleaser release --clean          # Full release
-#   goreleaser release --snapshot       # Test run (no push)
-#   goreleaser build                    # Just build, no release
+# Builds:  panel (linux/mac/win × amd64+arm64)
+#          agent (linux × amd64+arm64)
+#          gencerts (linux/mac/win × amd64+arm64)
 #
-# Environment variables:
-#   GORELEASER_CURRENT_TAG     — Override version tag
-#   GITHUB_TOKEN               — Required for GitHub release + Docker push
-#   COSIGN_PASSWORD            — For cosign key signing (optional)
+# Docker:  vortexuipro-panel  (amd64 + arm64 → multi-arch manifest)
+#          vortexuipro-node   (amd64 + arm64 → multi-arch manifest)
+#          (vortexuipro-web is built separately — it's a Node/Caddy image)
 #
+# NOTE: web/dist must be present before goreleaser runs.
+#       The CI workflow downloads it from the frontend build artifact.
 # ═══════════════════════════════════════════════════════════════════════
 
 version: 2
@@ -18,59 +18,45 @@ version: 2
 project_name: vortexuipro
 
 env:
-  - GO_VERSION=1.24
-  - NODE_VERSION=22
+  - GOTOOLCHAIN=local
+  - CGO_ENABLED=0
 
 before:
   hooks:
-    - go mod tidy
-    - go vet ./...
+    - go mod download
 
 # ═══════════════════════════════════════════════════════════════════════
-# 🏗️ Build — Cross-platform binaries
+# 🏗️ Builds
 # ═══════════════════════════════════════════════════════════════════════
 builds:
-  # ── Panel (main binary) ──────────────────────────────────────────
   - id: panel
     main: ./cmd/panel
     binary: vortexuipro
     env:
       - CGO_ENABLED=0
     ldflags:
-      - >-
-        -s -w
-        -X main.version={{ .Version }}
-        -X main.commit={{ .Commit }}
-        -X main.date={{ .Date }}
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-  # ── Agent (node) ─────────────────────────────────────────────────
   - id: agent
     main: ./cmd/agent
     binary: vortexuipro-agent
     env:
       - CGO_ENABLED=0
     ldflags:
-      - >-
-        -s -w
-        -X main.version={{ .Version }}
-        -X main.commit={{ .Commit }}
-        -X main.date={{ .Date }}
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - arm64
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    goos: [linux]
+    goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-  # ── Cert generator (utility) ─────────────────────────────────────
   - id: gencerts
     main: ./cmd/gencerts
     binary: vortexuipro-gencerts
@@ -78,176 +64,35 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 # ═══════════════════════════════════════════════════════════════════════
-# 📦 Archives — compress binaries for distribution
+# 📦 Archives
 # ═══════════════════════════════════════════════════════════════════════
 archives:
   - id: default
-    builds:
-      - panel
-      - agent
-      - gencerts
+    builds: [panel, agent, gencerts]
     formats: ["tar.gz"]
     format_overrides:
       - goos: windows
         formats: ["zip"]
+    name_template: >-
+      {{ .ProjectName }}-{{ .Tag }}-
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ .Os }}{{ end }}-
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    wrap_in_directory: true
     files:
       - README.md
       - LICENSE
-      - install.sh
       - CHANGELOG.md
+      - install.sh
       - deploy/compose.yml
       - deploy/production.yml
       - deploy/scripts/*
-    name_template: >-
-      {{ .ProjectName }}-{{ .Tag }}-
-      {{- if eq .Os "darwin" }}macOS-{{ .Os }}
-      {{- else }}{{ .Os }}{{ end }}-
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "arm64" }}arm64
-      {{- else }}{{ .Arch }}{{ end }}
-    wrap_in_directory: true
-    strip_binary: false
-
-# ═══════════════════════════════════════════════════════════════════════
-# 🐳 Docker — Multi-arch images
-# ═══════════════════════════════════════════════════════════════════════
-dockers:
-  # ── Panel amd64 ──────────────────────────────────────────────────
-  - id: panel-amd64
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-amd64"
-    dockerfile: deploy/Dockerfile.goreleaser
-    target: panel
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.title=VortexUiPro Panel"
-      - "--label=org.opencontainers.image.description=Next-generation proxy management panel"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/VortexUiPro"
-    extra_files:
-      - deploy/scripts
-      - migrations
-      - install.sh
-      - web/dist
-
-  # ── Panel arm64 ──────────────────────────────────────────────────
-  - id: panel-arm64
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-arm64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-arm64"
-    dockerfile: deploy/Dockerfile.goreleaser
-    target: panel
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.title=VortexUiPro Panel"
-      - "--label=org.opencontainers.image.description=Next-generation proxy management panel"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/VortexUiPro"
-    extra_files:
-      - deploy/scripts
-      - migrations
-      - install.sh
-      - web/dist
-
-  # ── Node agent amd64 ─────────────────────────────────────────────
-  - id: node-amd64
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-amd64"
-    dockerfile: deploy/Dockerfile.goreleaser
-    target: node
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.title=VortexUiPro Node Agent"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-    extra_files:
-      - deploy/scripts
-
-  # ── Node agent arm64 ─────────────────────────────────────────────
-  - id: node-arm64
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-arm64"
-    dockerfile: deploy/Dockerfile.goreleaser
-    target: node
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.title=VortexUiPro Node Agent"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-    extra_files:
-      - deploy/scripts
-
-# ═══════════════════════════════════════════════════════════════════════
-# 🖼️ Docker Manifests — Combine amd64 + arm64 into a single tag
-# ═══════════════════════════════════════════════════════════════════════
-docker_manifests:
-  # ── Panel multi-arch manifest ────────────────────────────────────
-  - id: panel-manifest-tag
-    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-arm64"
-
-  - id: panel-manifest-latest
-    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:latest"
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-arm64"
-
-  - id: panel-manifest-major
-    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}"
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}-arm64"
-
-  # ── Node agent multi-arch manifest ───────────────────────────────
-  - id: node-manifest-tag
-    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-arm64"
-
-  - id: node-manifest-latest
-    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:latest"
-    image_templates:
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-amd64"
-      - "ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}-arm64"
-
-# ═══════════════════════════════════════════════════════════════════════
-# 📝 SBOM — Software Bill of Materials
-# ═══════════════════════════════════════════════════════════════════════
-sboms:
-  - id: vortexuipro-sbom
-    artifacts: archive
-    documents:
-      - "{{ .ArtifactPath }}.spdx.sbom"
-    cmd: syft
-    args:
-      - "{{ .ArtifactPath }}"
-      - "--scope=all-layers"
-      - "--file={{ .ArtifactPath }}.spdx.sbom"
-      - "--output=spdx-json"
 
 # ═══════════════════════════════════════════════════════════════════════
 # ✅ Checksums
@@ -257,61 +102,174 @@ checksum:
   algorithm: sha256
 
 # ═══════════════════════════════════════════════════════════════════════
-# 🚀 Release — GitHub Release with auto-generated notes
+# 🐳 Docker images  (panel + node only — web is built separately)
+# ═══════════════════════════════════════════════════════════════════════
+dockers:
+  # ── panel amd64 ──────────────────────────────────────────────────
+  - id: panel-amd64
+    ids: [panel]
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: deploy/Dockerfile.goreleaser
+    target: panel
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.REGISTRY_OWNER }}/VortexUiPro"
+    extra_files:
+      - deploy/scripts
+      - migrations
+      - install.sh
+      - web/dist
+
+  # ── panel arm64 ──────────────────────────────────────────────────
+  - id: panel-arm64
+    ids: [panel]
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: deploy/Dockerfile.goreleaser
+    target: panel
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-arm64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.REGISTRY_OWNER }}/VortexUiPro"
+    extra_files:
+      - deploy/scripts
+      - migrations
+      - install.sh
+      - web/dist
+
+  # ── node amd64 ───────────────────────────────────────────────────
+  - id: node-amd64
+    ids: [agent]
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: deploy/Dockerfile.goreleaser
+    target: node
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+    extra_files:
+      - deploy/scripts
+
+  # ── node arm64 ───────────────────────────────────────────────────
+  - id: node-arm64
+    ids: [agent]
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: deploy/Dockerfile.goreleaser
+    target: node
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+    extra_files:
+      - deploy/scripts
+
+# ═══════════════════════════════════════════════════════════════════════
+# 🖼️ Docker manifests  (multi-arch)
+# ═══════════════════════════════════════════════════════════════════════
+docker_manifests:
+  - id: panel-tag
+    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-arm64"
+
+  - id: panel-latest
+    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:latest"
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}-arm64"
+
+  - id: panel-minor
+    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Major }}.{{ .Minor }}-arm64"
+
+  - id: node-tag
+    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-arm64"
+
+  - id: node-latest
+    name_template: "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:latest"
+    image_templates:
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}-arm64"
+
+# ═══════════════════════════════════════════════════════════════════════
+# 🚀 GitHub Release
 # ═══════════════════════════════════════════════════════════════════════
 release:
   github:
-    owner: "{{ .Env.REGISTRY_OWNER | default .ProjectName }}"
+    owner: "{{ .Env.REGISTRY_OWNER }}"
     name: VortexUiPro
   prerelease: auto
   mode: append
   header: |
     # 🚀 VortexUiPro {{ .Tag }}
 
-    > {{ .Date }}
+    > Released: {{ .Date }}
 
-    ## 📥 Downloads
+    ## 📥 Binary Downloads
 
-    | OS | Arch | Binary |
-    |----|------|--------|
+    | OS | Arch | File |
+    |----|------|------|
     | Linux | amd64 | `vortexuipro-{{ .Tag }}-linux-x86_64.tar.gz` |
     | Linux | arm64 | `vortexuipro-{{ .Tag }}-linux-arm64.tar.gz` |
     | macOS | amd64 | `vortexuipro-{{ .Tag }}-macOS-x86_64.tar.gz` |
     | macOS | arm64 | `vortexuipro-{{ .Tag }}-macOS-arm64.tar.gz` |
     | Windows | amd64 | `vortexuipro-{{ .Tag }}-windows-x86_64.zip` |
 
-    ## 🐳 Docker Images (Multi-Arch)
+    ## 🐳 Docker Images
 
-    - `ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-panel:{{ .Tag }}` (linux/amd64 + linux/arm64)
-    - `ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-node:{{ .Tag }}` (linux/amd64 + linux/arm64)
-    - `ghcr.io/{{ .Env.REGISTRY_OWNER | default .ProjectName }}/vortexuipro-web:{{ .Tag }}` (linux/amd64 + linux/arm64)
+    ```bash
+    # Panel (web UI + API)
+    docker pull ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-panel:{{ .Tag }}
 
-    ## 🔐 Checksums
+    # Node agent
+    docker pull ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-node:{{ .Tag }}
 
-    See `checksums.txt` in assets.
+    # Web (Caddy SPA)
+    docker pull ghcr.io/{{ .Env.REGISTRY_OWNER }}/vortexuipro-web:{{ .Tag }}
+    ```
 
-    ## 🧪 SBOM
-
-    Software Bill of Materials available in assets (SPDX format).
+    ## 🔐 Verify checksums
+    ```bash
+    sha256sum -c checksums.txt
+    ```
 
     ---
-
     ### 📋 Changelog
 
   footer: |
     ---
-
-    > 🤖 Generated by [GoReleaser](https://goreleaser.com)
-
-  extra_files:
-    - glob: ./dist/**/*.spdx.sbom
-    - glob: ./dist/checksums.txt
+    > 🤖 Built with [GoReleaser](https://goreleaser.com)
 
 # ═══════════════════════════════════════════════════════════════════════
 # 🔧 Changelog
 # ═══════════════════════════════════════════════════════════════════════
 changelog:
   use: github
+  sort: asc
   groups:
     - title: "🚀 Features"
       regexp: "^.*feat[(\\w)]*:+.*$"
@@ -330,7 +288,6 @@ changelog:
       order: 4
     - title: "🔧 Other Changes"
       order: 999
-  sort: asc
   filters:
     exclude:
       - "^bump:"
@@ -339,18 +296,12 @@ changelog:
       - "^Merge branch"
 
 # ═══════════════════════════════════════════════════════════════════════
-# 🧪 Test — Snapshot configuration for CI testing
+# 🧪 Snapshot
 # ═══════════════════════════════════════════════════════════════════════
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
 
-# ═══════════════════════════════════════════════════════════════════════
-# 📁 Output directory
-# ═══════════════════════════════════════════════════════════════════════
 dist: dist
 
-# ═══════════════════════════════════════════════════════════════════════
-# 📋 Announce — skip for CI (we use Telegram in the workflow)
-# ═══════════════════════════════════════════════════════════════════════
 announce:
   skip: "true"

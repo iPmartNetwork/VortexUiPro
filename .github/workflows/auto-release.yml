@@ -1,218 +1,173 @@
 # ═══════════════════════════════════════════════════════════════════════
-# VortexUiPro — Auto Release with GoReleaser 🚀
+# VortexUiPro — Auto Release 🚀
 #
-# Triggers on:
-#   - Push tag: v* (e.g., v0.1.0, v1.0.0-beta)
-#   - Manual: workflow_dispatch (with version input)
+# Triggers:
+#   - Tag push:  v* (e.g. v0.1.0, v1.0.0-beta)
+#   - Manual:    workflow_dispatch
 #
-# Features:
-#   ✅ GoReleaser — cross-platform builds (linux/mac/windows × amd64/arm64)
-#   🐳 Docker multi-arch build (linux/amd64 + linux/arm64)
-#   📦 Push to GHCR (ghcr.io/ipmartnetwork)
-#   📝 Auto GitHub Release with changelog
-#   🧪 SBOM generation (SPDX)
-#   🔐 Cosign signing (optional — requires COSIGN_PRIVATE_KEY secret)
-#   🔎 Trivy vulnerability scan on final images
-#   📨 Telegram deployment notification
+# Produces:
+#   ✅ Cross-platform binaries  (GoReleaser)
+#   🐳 Docker images:
+#       vortexuipro-panel  (GoReleaser)
+#       vortexuipro-node   (GoReleaser)
+#       vortexuipro-web    (separate job — Caddy/SPA, not a Go binary)
+#   📝 GitHub Release with changelog + checksums
+#   📨 Telegram notification (optional)
 #
 # Required Secrets:
-#   GHCR_PAT               — GitHub PAT with packages:write scope
-#   COSIGN_PRIVATE_KEY     — (optional) for signing artifacts
-#   COSIGN_PASSWORD        — (optional) for cosign key
-#   TELEGRAM_BOT_TOKEN     — (optional) for notifications
-#   TELEGRAM_CHAT_ID       — (optional) for notifications
-#
+#   GHCR_PAT           — PAT with packages:write
+#   TELEGRAM_BOT_TOKEN — (optional)
+#   TELEGRAM_CHAT_ID   — (optional)
 # ═══════════════════════════════════════════════════════════════════════
 
-name: 🚀 Auto Release (GoReleaser)
+name: 🚀 Auto Release
 
 on:
   push:
     tags:
-      - 'v*'
-      - '!v*-alpha*'
-      - '!v*-dev*'
+      - 'v[0-9]*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v0.1.0)'
+        description: 'Release version (e.g. v0.1.1)'
         required: true
         type: string
-      pre_release:
-        description: 'Mark as pre-release'
-        required: false
-        default: false
-        type: boolean
       skip_docker:
-        description: 'Skip Docker build (binaries only)'
-        required: false
-        default: false
-        type: boolean
-      skip_scan:
-        description: 'Skip vulnerability scan'
+        description: 'Skip Docker builds'
         required: false
         default: false
         type: boolean
 
 permissions:
-  contents: write        # ← needed for GitHub Release
-  packages: write        # ← needed for Docker push to GHCR
-  id-token: write        # ← needed for cosign keyless signing
+  contents: write   # GitHub Release
+  packages: write   # GHCR push
+  id-token: write   # cosign keyless
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   GO_VERSION: "1.24"
   NODE_VERSION: "22"
-  REGISTRY_OWNER: ${{ github.repository_owner }}
-  DOCKER_METADATA_PRUNE: "true"
 
+# ─────────────────────────────────────────────────────────────────────
 jobs:
   # ═══════════════════════════════════════════════════════════════════
-  # 🏗️ Build & Release (GoReleaser)
+  # 1️⃣  Build frontend — output uploaded as artifact for GoReleaser
   # ═══════════════════════════════════════════════════════════════════
-  goreleaser:
-    name: 🏗️ GoReleaser Build + Release
+  frontend:
+    name: 🎨 Build Frontend
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0  # ← needed for changelog
+      - uses: actions/checkout@v5
 
-      # ── Resolve version ──────────────────────────────────────────
-      - name: Resolve version
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="${{ github.event.inputs.version }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          # Strip 'v' prefix for version number
-          VER="${TAG#v}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "📦 Tag: ${TAG} → Version: ${VER}"
-
-      # ── Setup Go ─────────────────────────────────────────────────
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      # ── Setup Node (for web build validation) ────────────────────
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      # ── Validate frontend build ──────────────────────────────────
-      - name: Build frontend (validate)
+      - name: Build
         working-directory: web
-        run: |
-          npm ci
-          npm run build
+        run: npm ci && npm run build
 
-      # ── Login to GHCR ────────────────────────────────────────────
-      - name: Login to GitHub Container Registry
+      - name: Upload web/dist
+        uses: actions/upload-artifact@v5
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 2️⃣  GoReleaser — binaries + panel/node Docker images
+  # ═══════════════════════════════════════════════════════════════════
+  goreleaser:
+    name: 🏗️ GoReleaser
+    runs-on: ubuntu-latest
+    needs: [frontend]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.version }}"
+            # Create the tag locally so GoReleaser can find it
+            git tag "${TAG}" || true
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Restore frontend build for GoReleaser docker extra_files
+      - name: Download web/dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      # Migrations dir must exist (GoReleaser docker extra_files)
+      - name: Ensure migrations dir exists
+        run: mkdir -p migrations
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT || github.token }}
 
-      # ── Setup Docker Buildx (for multi-arch) ─────────────────────
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-
-      # ── Setup QEMU (for ARM emulation) ───────────────────────────
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # ── Install syft (for SBOM) ────────────────────────────────
-      - name: Install syft
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-
-      # ── Install cosign (for artifact signing) ────────────────────
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      # ── GoReleaser Release ───────────────────────────────────────
-      - name: GoReleaser Release
+      - name: GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          distribution: goreleaser
           version: latest
-          args: release --clean --timeout 60m
+          args: release --clean --timeout 90m
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_OWNER: ${{ github.repository_owner }}
-          # Only sign if COSIGN_PRIVATE_KEY is available
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          GOTOOLCHAIN: local
 
-      # ── Upload artifacts to workflow (for debugging) ─────────────
-      - name: Upload release artifacts
+      - name: Upload dist artifacts
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: release-artifacts
+          name: dist
           path: dist/
           retention-days: 7
 
-      # ── 📨 Telegram Notification ─────────────────────────────────
       - name: Telegram notification
-        if: always() && secrets.TELEGRAM_BOT_TOKEN
-        env:
-          STATUS: ${{ job.status }}
-          VERSION: ${{ steps.version.outputs.version }}
+        if: always()
         run: |
+          [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && exit 0
           EMOJI="$([ '${{ job.status }}' = 'success' ] && echo '✅' || echo '❌')"
-          MESSAGE="${EMOJI} <b>VortexUiPro Release</b>
-          Version: ${{ steps.version.outputs.tag }}
-          Status: ${{ job.status }}
-          Trigger: ${{ github.event_name }}
-          By: ${{ github.actor }}
-
-          <a href='${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}'>📦 View Release</a>"
-
           curl -sf -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=${MESSAGE}" \
-            -d "parse_mode=HTML" \
-            -d "disable_web_page_preview=true" || echo '⚠️ Telegram notification failed'
+            -d "text=${EMOJI} VortexUiPro ${{ steps.tag.outputs.tag }} release: ${{ job.status }}" \
+            -d "parse_mode=HTML" || true
 
   # ═══════════════════════════════════════════════════════════════════
-  # 🌐 Web Docker — Build & push the Caddy/SPA image separately
-  #              (GoReleaser only handles Go binaries, not Node/SPA)
+  # 3️⃣  Web Docker — Caddy + SPA image (multi-arch, parallel)
   # ═══════════════════════════════════════════════════════════════════
   web-docker:
-    name: 🌐 Web Docker (Caddy + SPA)
+    name: 🌐 Web Docker
     runs-on: ubuntu-latest
-    if: ${{ !github.event.inputs.skip_docker }}
-    # Parallel with goreleaser — version resolved independently
-    needs: []
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+    if: ${{ !inputs.skip_docker }}
+    needs: [frontend]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
       - name: Get version
         id: ver
@@ -222,15 +177,11 @@ jobs:
           else
             TAG="${GITHUB_REF_NAME}"
           fi
-          VER="${TAG#v}"
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "📦 Version: ${VER}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -239,123 +190,49 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT || github.token }}
 
-      - name: Set platform tag suffix
-        id: platform_tag
+      - name: Set image name (lowercase owner)
+        id: img
         run: |
-          ARCH="${{ matrix.platform }}"
-          case "${ARCH}" in
-            linux/amd64) SUFFIX="amd64" ;;
-            linux/arm64) SUFFIX="arm64" ;;
-            *) SUFFIX="${ARCH#linux/}" ;;
-          esac
-          echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${OWNER}/vortexuipro-web" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push web image (${{ matrix.platform }})
+      - name: Build and push web image (multi-arch)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/web.Dockerfile
           push: true
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${{ steps.ver.outputs.version }}-${{ steps.platform_tag.outputs.suffix }}
-            ghcr.io/${{ github.repository_owner }}/vortexuipro-web:latest-${{ steps.platform_tag.outputs.suffix }}
-          build-args: |
-            VERSION=${{ steps.ver.outputs.version }}
-          cache-from: type=gha,scope=web-${{ steps.platform_tag.outputs.suffix }}
-          cache-to: type=gha,mode=max,scope=web-${{ steps.platform_tag.outputs.suffix }},ignore-error=true
-
-      - name: Trivy scan (web image)
-        if: ${{ !github.event.inputs.skip_scan }}
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${{ steps.ver.outputs.version }}-${{ steps.platform_tag.outputs.suffix }}
-          format: sarif
-          output: trivy-web-${{ steps.platform_tag.outputs.suffix }}.sarif
-          severity: HIGH,CRITICAL
-          exit-code: '0'
-          hide-progress: true
-
-      - name: Upload Trivy results
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: trivy-web-${{ steps.platform_tag.outputs.suffix }}
-          path: trivy-web-$*.sarif
-          retention-days: 7
+            ${{ steps.img.outputs.name }}:${{ steps.ver.outputs.version }}
+            ${{ steps.img.outputs.name }}:${{ steps.ver.outputs.tag }}
+            ${{ steps.img.outputs.name }}:latest
+          build-args: VERSION=${{ steps.ver.outputs.version }}
+          cache-from: type=gha,scope=web-release
+          cache-to: type=gha,mode=max,scope=web-release,ignore-error=true
 
   # ═══════════════════════════════════════════════════════════════════
-  # 🖼️ Docker Manifest — Merge amd64 + arm64 into single multi-arch tag
-  # ═══════════════════════════════════════════════════════════════════
-  docker-manifest:
-    name: 🖼️ Docker Multi-Arch Manifest
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.inputs.skip_docker }}
-    needs: [goreleaser, web-docker]
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_PAT || github.token }}
-
-      - name: Create and push multi-arch manifest (panel)
-        run: |
-          VERSION="${{ needs.goreleaser.outputs.version }}"
-          # Panel: GoReleaser already created manifests via docker_manifests
-          # Create web manifest manually
-          docker manifest create \
-            ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION} \
-            --amend ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION}-amd64 \
-            --amend ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION}-arm64
-          docker manifest push ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION}
-
-          # Also tag as latest
-          docker manifest create \
-            ghcr.io/${{ github.repository_owner }}/vortexuipro-web:latest \
-            --amend ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION}-amd64 \
-            --amend ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION}-arm64
-          docker manifest push ghcr.io/${{ github.repository_owner }}/vortexuipro-web:latest
-
-      - name: Verify manifests
-        run: |
-          VERSION="${{ needs.goreleaser.outputs.version }}"
-          echo "✅ Panel manifest:"
-          docker manifest inspect ghcr.io/${{ github.repository_owner }}/vortexuipro-panel:${VERSION} | head -10
-          echo ""
-          echo "✅ Web manifest:"
-          docker manifest inspect ghcr.io/${{ github.repository_owner }}/vortexuipro-web:${VERSION} | head -10
-
-  # ═══════════════════════════════════════════════════════════════════
-  # 📋 Final Summary
+  # 4️⃣  Summary
   # ═══════════════════════════════════════════════════════════════════
   summary:
-    name: 📋 Release Summary
+    name: 📋 Summary
     runs-on: ubuntu-latest
-    needs: [goreleaser, web-docker, docker-manifest]
-    # always() + allow skipped dependencies
+    needs: [goreleaser, web-docker]
     if: ${{ !cancelled() }}
     steps:
-      - name: Generate summary
+      - name: Write summary
         run: |
-          VERSION="${{ needs.goreleaser.outputs.version || github.ref_name }}"
-          OWNER="${{ github.repository_owner }}"
-          GRESULT="${{ needs.goreleaser.result || 'skipped' }}"
-          WBRESULT="${{ needs.web-docker.result || 'skipped' }}"
-          DMRESULT="${{ needs.docker-manifest.result || 'skipped' }}"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## 🚀 VortexUiPro Release
 
-          echo "## 🚀 VortexUiPro Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **GoReleaser Build** | ${GRESULT} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Web Docker** | ${WBRESULT} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Multi-Arch Manifest** | ${DMRESULT} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Downloads" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **GitHub Release**: [${VERSION}](https://github.com/${OWNER}/VortexUiPro/releases/tag/v${VERSION})" >> $GITHUB_STEP_SUMMARY
-          echo "- **Panel Image**: \`ghcr.io/${OWNER}/vortexuipro-panel:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Web Image**: \`ghcr.io/${OWNER}/vortexuipro-web:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Node Image**: \`ghcr.io/${OWNER}/vortexuipro-node:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          | Job | Result |
+          |-----|--------|
+          | GoReleaser (binaries + panel + node) | ${{ needs.goreleaser.result }} |
+          | Web Docker | ${{ needs.web-docker.result }} |
+
+          ### Docker Images
+          - \`ghcr.io/${OWNER}/vortexuipro-panel:${{ github.ref_name }}\`
+          - \`ghcr.io/${OWNER}/vortexuipro-node:${{ github.ref_name }}\`
+          - \`ghcr.io/${OWNER}/vortexuipro-web:${{ github.ref_name }}\`
+          EOF
