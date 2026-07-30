@@ -141,11 +141,12 @@ jobs:
         id: owner
         run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: GoReleaser
+      - name: GoReleaser (binaries only — skip docker for diagnosis)
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --clean --timeout 90m --verbose
+          args: release --clean --timeout 90m --verbose --skip=docker,docker_manifests
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
