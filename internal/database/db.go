@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"gorm.io/driver/postgres"
-	gormsqlite "gorm.io/driver/sqlite"
+	gormsqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO-free)
 )
 
 var DB *gorm.DB
