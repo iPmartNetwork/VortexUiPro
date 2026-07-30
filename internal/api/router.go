@@ -671,17 +671,22 @@ func NewRouter(
 	// ─── Static Web UI (embedded) ────────────────────────────────
 	distFS, err := fs.Sub(web.Dist, "dist")
 	if err == nil {
-		fileServer := http.FileServer(http.FS(distFS))
+		engine.GET("/", func(c *gin.Context) {
+			c.FileFromFS("index.html", http.FS(distFS))
+		})
 		engine.NoRoute(func(c *gin.Context) {
-			path := c.Request.URL.Path
-			// Check if file exists in dist
-			f, ferr := distFS.Open(strings.TrimPrefix(path, "/"))
-			if ferr == nil {
-				f.Close()
-				fileServer.ServeHTTP(c.Writer, c.Request)
+			path := strings.TrimPrefix(c.Request.URL.Path, "/")
+			if path == "" {
+				c.FileFromFS("index.html", http.FS(distFS))
 				return
 			}
-			// SPA fallback — serve index.html for all unknown routes
+			f, ferr := distFS.Open(path)
+			if ferr == nil {
+				f.Close()
+				c.FileFromFS(path, http.FS(distFS))
+				return
+			}
+			// SPA fallback
 			c.FileFromFS("index.html", http.FS(distFS))
 		})
 	} else {
