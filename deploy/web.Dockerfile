@@ -54,4 +54,5 @@ EXPOSE 80 443
 
 LABEL org.opencontainers.image.title="VortexUiPro Web"
 LABEL org.opencontainers.image.description="Web server for VortexUiPro panel with automatic HTTPS"
-LABEL org.opencontainers.image.version=${VERSION}
+ARG VERSION=0.0.1
+LABEL org.opencontainers.image.version=$VERSION
