@@ -130,6 +130,13 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT || github.token }}
 
+      # Pre-flight: verify Go can build the project
+      - name: Verify Go build
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: "0"
+        run: go build ./cmd/panel ./cmd/agent ./cmd/gencerts
+
       - name: Set lowercase registry owner
         id: owner
         run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
