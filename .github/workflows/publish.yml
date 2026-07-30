@@ -1,12 +1,18 @@
 name: Publish Docker Images
 
+# Triggered automatically when a GitHub Release is published,
+# or manually to republish a specific version tag.
+#
+# Builds and pushes all three images (panel, node, web) as
+# multi-arch (linux/amd64 + linux/arm64) to GHCR.
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Docker image tag to publish'
+        description: 'Version tag to publish (e.g. v0.1.1)'
         required: true
 
 permissions:
@@ -15,11 +21,11 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  GO_VERSION: "1.24"
+  GOTOOLCHAIN: local
 
 jobs:
   publish:
-    name: Publish Multi-Arch Images
+    name: Publish ${{ matrix.name }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -27,33 +33,38 @@ jobs:
         include:
           - name: panel
             file: deploy/Dockerfile
-            target: panel
-            platforms: linux/amd64,linux/arm64
-          - name: web
-            file: deploy/web.Dockerfile
-            target: ''
-            platforms: linux/amd64,linux/arm64
+            build_target: panel
           - name: node
             file: deploy/Dockerfile
-            target: node
-            platforms: linux/amd64,linux/arm64
+            build_target: node
+          - name: web
+            file: deploy/web.Dockerfile
+            build_target: ''
+
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set image prefix (lowercase)
-        id: prefix
-        run: |
-          echo "value=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/vortexuipro" >> "$GITHUB_OUTPUT"
-
+      # ── Resolve version ─────────────────────────────────────────
       - name: Get version
         id: ver
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF_NAME}"
           else
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ github.event.inputs.version }}"
           fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      # ── Image name (lowercase owner) ────────────────────────────
+      - name: Set image name
+        id: img
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${OWNER}/vortexuipro-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      # ── Docker setup ─────────────────────────────────────────────
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -61,47 +72,33 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GHCR_PAT || github.token }}
 
+      # ── Metadata ─────────────────────────────────────────────────
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.prefix.outputs.value }}-${{ matrix.name }}
+          images: ${{ steps.img.outputs.name }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'master') }}
-          flavor: |
-            latest=false
+            type=raw,value=${{ steps.ver.outputs.version }}
+            type=raw,value=${{ steps.ver.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ver.outputs.tag }}
+            type=raw,value=latest
+          flavor: latest=false
 
+      # ── Build & push ─────────────────────────────────────────────
       - name: Build and push ${{ matrix.name }}
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.file }}
-          target: ${{ matrix.target || '' }}
+          target: ${{ matrix.build_target }}
           push: true
-          platforms: ${{ matrix.platforms }}
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.ver.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }},ignore-error=true
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ steps.prefix.outputs.value }}-${{ matrix.name }}:${{ steps.ver.outputs.version }}
-          format: spdx-json
-          output-file: sbom-${{ matrix.name }}.spdx.json
-
-      - name: Sign image with cosign
-        uses: sigstore/cosign-installer@v3
-      - name: Sign image
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          cosign sign --yes \
-            "${{ steps.prefix.outputs.value }}-${{ matrix.name }}@${{ steps.digest.outputs.digest }}"
+          build-args: VERSION=${{ steps.ver.outputs.version }}
+          cache-from: type=gha,scope=publish-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=publish-${{ matrix.name }},ignore-error=true
