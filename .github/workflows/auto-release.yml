@@ -153,7 +153,9 @@ jobs:
           REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
           GOTOOLCHAIN: local
         run: |
-          goreleaser release --clean --timeout 90m --skip=docker,docker_manifests
+          goreleaser release --clean --timeout 90m \
+            --skip docker \
+            --skip docker_manifests
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v5
