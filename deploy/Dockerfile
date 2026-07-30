@@ -26,16 +26,23 @@ ENV VITE_APP_VERSION=$VERSION
 RUN npm run build
 
 # ── Stage 2: Backend (panel binary, needs web dist) ────────────────
-FROM golang:1.24-alpine AS backend-builder
+# Use --platform=$BUILDPLATFORM so the builder runs native (amd64)
+# and cross-compiles for the target platform.
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS backend-builder
 WORKDIR /app
 ENV GOTOOLCHAIN=local
+ARG TARGETARCH
+ARG TARGETOS=linux
 RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend-builder /app/web/dist ./web/dist
 ARG VERSION=0.0.1
-RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /usr/local/bin/vortexuipro ./cmd/panel
+# CGO_ENABLED=0 — avoids CGO cross-compilation issues in multi-arch builds
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /usr/local/bin/vortexuipro ./cmd/panel
 
 # ── Stage 3: Agent (lightweight node binary, NO frontend deps!) ────
 FROM golang:1.24-alpine AS agent-builder

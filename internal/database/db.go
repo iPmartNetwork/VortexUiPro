@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO-free)
 )
 
 var DB *gorm.DB
@@ -50,7 +51,8 @@ func InitDB(cfg Config) error {
 	var dialector gorm.Dialector
 	switch cfg.Type {
 	case "sqlite":
-		dialector = sqlite.Open(cfg.DSN + "?_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
+		// Use modernc pure-Go driver — registered as "sqlite" (CGO-free)
+		dialector = gormsqlite.Open(cfg.DSN + "?_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
 	case "postgres":
 		dialector = postgres.Open(cfg.DSN)
 	default:
