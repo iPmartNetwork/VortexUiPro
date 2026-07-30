@@ -153,11 +153,7 @@ jobs:
           REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
           GOTOOLCHAIN: local
         run: |
-          goreleaser release --clean --timeout 90m --skip=docker,docker_manifests 2>&1 || (echo "GoReleaser failed with exit $?"; exit 1)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_OWNER: ${{ steps.owner.outputs.value }}
-          GOTOOLCHAIN: local
+          goreleaser release --clean --timeout 90m --skip=docker,docker_manifests
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v5
