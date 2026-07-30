@@ -304,6 +304,7 @@ NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
+ReadWritePaths=/etc/vortexuipro
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
